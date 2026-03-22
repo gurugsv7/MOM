@@ -20,16 +20,16 @@ const CATEGORIES: { value: GoalCategory; label: string; emoji: string }[] = [
 
 const GOAL_COLORS = ['#6366f1', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#0ea5e9', '#ef4444']
 
-function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function NewGoalModal({ onClose, onCreated, initialGoal }: { onClose: () => void; onCreated: () => void; initialGoal?: any }) {
   const { user } = useAuthStore()
   const { addToast } = useUIStore()
   const [form, setForm] = useState({
-    title: '',
-    category: 'habit' as GoalCategory,
-    description: '',
-    deadline: '',
-    daily_budget_minutes: 60,
-    color: GOAL_COLORS[0],
+    title: initialGoal?.title || '',
+    category: initialGoal?.category || 'habit' as GoalCategory,
+    description: initialGoal?.description || '',
+    deadline: initialGoal?.deadline || '',
+    daily_budget_minutes: initialGoal?.daily_budget_minutes || 60,
+    color: initialGoal?.color || GOAL_COLORS[0],
   })
   const [step, setStep] = useState<'form' | 'generating' | 'preview'>('form')
   const [roadmapData, setRoadmapData] = useState<Awaited<ReturnType<typeof generateRoadmap>> | null>(null)
@@ -59,13 +59,27 @@ function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const handleConfirm = async () => {
     if (!user || !roadmapData) return
 
-    const { data: goal, error: gErr } = await supabase
-      .from('goals')
-      .insert({ ...form, user_id: user.id, status: 'active' })
-      .select()
-      .single()
+    let goalId = initialGoal?.id;
 
-    if (gErr || !goal) { addToast('Failed to save goal', 'error'); return }
+    if (initialGoal) {
+      const { error: uErr } = await supabase
+        .from('goals')
+        .update({ ...form })
+        .eq('id', initialGoal.id);
+      if (uErr) { addToast('Shields failed: Could not update mission.', 'error'); return; }
+      
+      // Clear existing future days if regenerating
+      await supabase.from('goal_days').delete().eq('goal_id', initialGoal.id).gt('scheduled_date', format(new Date(), 'yyyy-MM-dd'));
+    } else {
+      const { data: goal, error: gErr } = await supabase
+        .from('goals')
+        .insert({ ...form, user_id: user.id, status: 'active' })
+        .select()
+        .single();
+      
+      if (gErr || !goal) { addToast('Deployment failure: Mission not saved.', 'error'); return; }
+      goalId = goal.id;
+    }
 
     for (const day of roadmapData.days) {
       const scheduledDate = new Date()
@@ -73,7 +87,7 @@ function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
 
       const { data: gDay } = await supabase
         .from('goal_days')
-        .insert({ goal_id: goal.id, user_id: user.id, day_number: day.day_number, scheduled_date: format(scheduledDate, 'yyyy-MM-dd'), status: 'pending' })
+        .insert({ goal_id: goalId, user_id: user.id, day_number: day.day_number, scheduled_date: format(scheduledDate, 'yyyy-MM-dd'), status: 'pending' })
         .select()
         .single()
 
@@ -229,7 +243,10 @@ export function GoalsPage() {
   const { goals, fetchGoals, isLoading } = useGoalsStore()
   const { addToast } = useUIStore()
   const [showNewGoal, setShowNewGoal] = useState(false)
+  const [editingGoal, setEditingGoal] = useState<any | null>(null)
   const [expandedGoal, setExpandedGoal] = useState<string | null>(null)
+  const [intelInput, setIntelInput] = useState<Record<string, string>>({})
+  const [isUpdatingIntel, setIsUpdatingIntel] = useState<string | null>(null)
 
   const load = useCallback(() => {
     if (user) fetchGoals(user.id)
@@ -289,27 +306,43 @@ export function GoalsPage() {
                     <div className="mt-4">
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-[10px] uppercase font-black tracking-[0.2em] text-primary">Tactical Intelligence</p>
-                        <button 
-                          onClick={async () => {
-                            const note = prompt('Append intelligence to mission dossier:');
-                            if (note && user) {
-                              const newDesc = (goal.description ? goal.description + '\n---\n' : '') + `[INTEL UPDATE ${format(new Date(), 'HH:mm')}]: ` + note;
-                              const { error } = await supabase.from('goals').update({ description: newDesc }).eq('id', goal.id);
-                              if (!error) {
-                                fetchGoals(user.id);
-                                addToast('Intelligence dossier updated.', 'success');
-                              }
-                            }
-                          }}
-                          className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors underline"
-                        >
-                          + Add Intel
-                        </button>
                       </div>
-                      <div className="bg-surface-highest/50 p-3 border-l-2 border-primary/30">
-                        <p className="text-xs text-on-surface leading-relaxed whitespace-pre-wrap">
-                          {goal.description || 'No strategic intel provided for this mission.'}
-                        </p>
+                      <div className="bg-surface-highest/50 p-4 border-l-2 border-primary/30 space-y-3">
+                        {goal.description ? (
+                          <p className="text-xs text-on-surface leading-relaxed whitespace-pre-wrap font-medium">
+                            {goal.description}
+                          </p>
+                        ) : (
+                          <p className="text-[10px] text-on-surface-variant/40 italic">Waiting for field operations metadata...</p>
+                        )}
+                        
+                        <div className="flex gap-2 pt-2 border-t border-outline-variant/5">
+                          <input 
+                            placeholder="Append field intel..."
+                            className="flex-1 bg-surface-high border-none text-[10px] px-2 py-1.5 focus:ring-1 focus:ring-primary text-on-surface"
+                            value={intelInput[goal.id] || ''}
+                            onChange={(e) => setIntelInput({ ...intelInput, [goal.id]: e.target.value })}
+                            onKeyDown={async (e) => {
+                              if (e.key === 'Enter') {
+                                const note = intelInput[goal.id];
+                                if (!note || !user) return;
+                                setIsUpdatingIntel(goal.id);
+                                const newDesc = (goal.description ? goal.description + '\n---\n' : '') + `[INTEL ${format(new Date(), 'HH:mm')}]: ` + note;
+                                await supabase.from('goals').update({ description: newDesc }).eq('id', goal.id);
+                                setIntelInput({ ...intelInput, [goal.id]: '' });
+                                await fetchGoals(user.id);
+                                setIsUpdatingIntel(null);
+                                addToast('Mission dossier updated.', 'success');
+                              }
+                            }}
+                          />
+                          <button 
+                            disabled={isUpdatingIntel === goal.id}
+                            className="text-[9px] font-black uppercase text-primary hover:text-white transition-colors"
+                          >
+                           {isUpdatingIntel === goal.id ? 'SYNCING...' : 'COMMIT'}
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -330,7 +363,13 @@ export function GoalsPage() {
 
                     {/* Action Bar */}
                     <div className="flex gap-2">
-                      <button className="flex-1 py-2.5 bg-surface-highest border border-outline-variant/20 text-[10px] font-black uppercase tracking-widest text-on-surface hover:bg-surface-high transition-colors btn-press">
+                      <button 
+                        onClick={() => {
+                          setEditingGoal(goal);
+                          setShowNewGoal(true);
+                        }}
+                        className="flex-1 py-2.5 bg-surface-highest border border-outline-variant/20 text-[10px] font-black uppercase tracking-widest text-on-surface hover:bg-surface-high transition-colors btn-press"
+                      >
                         Modify Strategy
                       </button>
                       <button 
@@ -354,7 +393,14 @@ export function GoalsPage() {
       </div>
 
       {showNewGoal && (
-        <NewGoalModal onClose={() => setShowNewGoal(false)} onCreated={load} />
+        <NewGoalModal 
+          onClose={() => {
+            setShowNewGoal(false);
+            setEditingGoal(null);
+          }} 
+          onCreated={load} 
+          initialGoal={editingGoal}
+        />
       )}
     </div>
   )

@@ -15,7 +15,7 @@ interface GoalsState {
   fetchTodayTasks: (userId: string) => Promise<void>
   updateTaskStatus: (taskId: string, status: 'done' | 'skipped' | 'pending') => Promise<void>
   skipTask: (taskId: string, userId: string) => Promise<void>
-  redistributeMissedTasks: (userId: string) => Promise<void>
+  redistributeMissedTasks: (userId: string) => Promise<boolean>
 }
 
 export const useGoalsStore = create<GoalsState>((set, get) => ({
@@ -38,7 +38,12 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
 
   fetchTodayTasks: async (userId: string) => {
     // 1. Detect and handle missed days first
-    await get().redistributeMissedTasks(userId)
+    const shifted = await get().redistributeMissedTasks(userId)
+    if (shifted) {
+      // Accessing UI store to notify user
+      const { useUIStore } = await import('@/stores/uiStore')
+      useUIStore.getState().addToast('Yesterday session missed. Roadmap updated! 🚀', 'info')
+    }
 
     const today = new Date().toISOString().split('T')[0]
 
@@ -147,6 +152,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
 
   redistributeMissedTasks: async (userId: string) => {
     const today = new Date().toISOString().split('T')[0]
+    let shifted = false
 
     // 1. Fetch missed days (pending days in the past)
     const { data: missedDays } = await supabase
@@ -157,7 +163,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       .lt('scheduled_date', today)
       .order('scheduled_date', { ascending: true })
 
-    if (!missedDays || missedDays.length === 0) return
+    if (!missedDays || missedDays.length === 0) return false
 
     for (const day of missedDays) {
       const pendingTasks = (day.tasks ?? []).filter((t: any) => t.status === 'pending')
@@ -174,6 +180,8 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
         if (futureDays && futureDays.length > 0) {
           const result = redistribute(day.day_number, pendingTasks, futureDays as any, 180)
           
+          if (result.updatedDays.length > 0) shifted = true;
+
           for (const update of result.updatedDays) {
             for (const t of update.tasks) {
               const { id, ...newTask } = t as any
@@ -196,5 +204,6 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       // Mark day as 'missed'
       await supabase.from('goal_days').update({ status: 'missed' }).eq('id', day.id)
     }
+    return shifted
   }
 }))
