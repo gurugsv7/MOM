@@ -24,9 +24,17 @@ function buildUrl(path: string) {
   return `${ENDPOINT}/openai/deployments/${DEPLOYMENT}/${path}?api-version=${API_VERSION}`
 }
 
-async function azureChat(messages: Array<{ role: string; content: string }>): Promise<string> {
+async function azureChat(
+  messages: Array<{ role: string; content: string }>,
+  jsonMode: boolean = false
+): Promise<string> {
   if (!ENDPOINT || !API_KEY) {
     throw new Error('Azure OpenAI credentials not configured. Add VITE_AZURE_OPENAI_ENDPOINT and VITE_AZURE_OPENAI_API_KEY to .env')
+  }
+
+  const body: any = { messages, temperature: 1 }
+  if (jsonMode) {
+    body.response_format = { type: 'json_object' }
   }
 
   const res = await fetch(buildUrl('chat/completions'), {
@@ -35,15 +43,21 @@ async function azureChat(messages: Array<{ role: string; content: string }>): Pr
       'Content-Type': 'application/json',
       'api-key': API_KEY,
     },
-    body: JSON.stringify({ messages, temperature: 1, response_format: { type: 'json_object' } }),
+    body: JSON.stringify(body),
   })
 
   if (!res.ok) {
     const err = await res.text()
+    console.error('Azure OpenAI Error Response:', err)
     throw new Error(`Azure OpenAI error ${res.status}: ${err}`)
   }
 
   const data = await res.json()
+  if (!data.choices?.[0]?.message?.content) {
+    console.error('Invalid Azure OpenAI Response Format:', data)
+    throw new Error('Invalid response format from Azure OpenAI')
+  }
+
   return data.choices[0].message.content as string
 }
 
@@ -57,7 +71,7 @@ export async function generateRoadmap(
   dailyBudgetMinutes: number
 ): Promise<RoadmapResponse> {
   const cappedDays = Math.min(daysTotal || 14, 14)
-  const system = `You are MOM (My Own Manager) Command Center. 
+  const system = `You are MOM, your friendly and supportive personal manager. 
   Generate a realistic, high-fidelity day-by-day tactical roadmap based on the operator's specific constraints, experience level, and motivation.
   Avoid generic advice. Tailor every task to the provided context.
   Respond ONLY with valid JSON matching this schema: { "days": [{ "day_number": 1, "tasks": [{ "title": "...", "description": "...", "estimated_minutes": 30 }] }] }`
@@ -75,7 +89,7 @@ Ensure the tasks are progressive and actionable.`
   const content = await azureChat([
     { role: 'system', content: system },
     { role: 'user', content: user },
-  ])
+  ], true)
 
   const jsonMatch = content.match(/\{[\s\S]*\}/)
   if (!jsonMatch) throw new Error('Invalid AI response — no JSON found')
@@ -99,7 +113,7 @@ Rewrite each task title and description to flow naturally with the day's other t
   const content = await azureChat([
     { role: 'system', content: system },
     { role: 'user', content: user },
-  ])
+  ], true)
 
   const jsonMatch = content.match(/\{[\s\S]*\}/)
   if (!jsonMatch) return redistributedTasks
@@ -124,7 +138,7 @@ export async function processChatIntent(userMessage: string, context: { todayTas
     {
       "intent": "ADD_GOAL" | "ADD_TASK" | "ADD_VAULT_ENTRY" | "VAULT_LOOKUP" | "SKIP_TASK" | "STATUS_CHECK" | "CHAT" | "DISAMBIGUATE",
       "params": { ... },
-      "momResponse": "MOM response: Tactical, supportive, and extremely thorough."
+      "momResponse": "Your response: Friendly, supportive, and extremely helpful. Keep it concise."
     }
 
     --- MISSION DOCTRINE (Rules for ADD_GOAL) ---
@@ -148,24 +162,15 @@ export async function processChatIntent(userMessage: string, context: { todayTas
     - [SECURITY] Never ask for passwords. Use the secure widget for vault entries.
     - [VAULT STORE] If user says "store my password" or similar, use ADD_VAULT_ENTRY with site/username.
     - [VAULT LOOKUP] If user asks for an existing password, set intent to VAULT_LOOKUP and provide the 'site' in params.
-    - [UX TONE] Efficient Personal Assistant meets High-Security System. Use professional terminal language. No emojis. Warm but mission-focused.
+    - [UX TONE] Friendly Personal Manager. Be supportive and warm. avoid heavy military or tactical jargon. No excessive use of bold (**). Be brief but clear.
   `
 
-  const response = await fetch(`${ENDPOINT}/openai/deployments/${DEPLOYMENT}/chat/completions?api-version=${API_VERSION}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'api-key': API_KEY },
-    body: JSON.stringify({
-      messages: [
-        { role: 'system', content: 'You are MOM COMMAND center, a tactical management OS.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.7, // Lower temperature for more stable intent classification
-      response_format: { type: 'json_object' }
-    })
-  })
+  const content = await azureChat([
+    { role: 'system', content: 'You are MOM, a friendly and helpful personal manager assistant.' },
+    { role: 'user', content: prompt }
+  ], true)
 
-  const data = await response.json()
-  return JSON.parse(data.choices[0].message.content)
+  return JSON.parse(content)
 }
 
 export async function generateMemoryUpdate(oldSummary: string, interaction: string) {
@@ -185,20 +190,12 @@ export async function generateMemoryUpdate(oldSummary: string, interaction: stri
     Keep it formal and technical (e.g. 'MOM App is hosted on Netlify (guru@gmail.com).', 'Supabase link via Google Sigin-in.').
   `
 
-  const response = await fetch(`${ENDPOINT}/openai/deployments/${DEPLOYMENT}/chat/completions?api-version=${API_VERSION}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'api-key': API_KEY },
-    body: JSON.stringify({
-      messages: [
-        { role: 'system', content: 'You are MOM Memory Processor.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 1
-    })
-  })
+  const content = await azureChat([
+    { role: 'system', content: 'You are MOM Memory Processor.' },
+    { role: 'user', content: prompt }
+  ])
 
-  const data = await response.json()
-  return data.choices[0].message.content
+  return content
 }
 
 export async function pruneMemorySummary(summary: string, activeGoals: { title: string }[]) {
@@ -220,18 +217,10 @@ export async function pruneMemorySummary(summary: string, activeGoals: { title: 
     Return the CLEANED, OPTIMIZED bullet points. No conversational filler.
   `
 
-  const response = await fetch(`${ENDPOINT}/openai/deployments/${DEPLOYMENT}/chat/completions?api-version=${API_VERSION}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'api-key': API_KEY },
-    body: JSON.stringify({
-      messages: [
-        { role: 'system', content: 'You are MOM Memory Optimizer.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 1
-    })
-  })
+  const content = await azureChat([
+    { role: 'system', content: 'You are MOM Memory Optimizer.' },
+    { role: 'user', content: prompt }
+  ])
 
-  const data = await response.json()
-  return data.choices[0].message.content
+  return content
 }

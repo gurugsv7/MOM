@@ -32,7 +32,7 @@ export const useChatStore = create<ChatState>((set) => ({
     {
       id: '1',
       role: 'mom',
-      content: 'MOM COMMAND SYSTEM INITIALIZED. Awaiting instructions, Operator.',
+      content: "Hello! I'm MOM, your personal manager. I'm here to help you stay on top of your goals and keep your secrets safe. What can we work on together today?",
       timestamp: new Date().toISOString(),
     }
   ],

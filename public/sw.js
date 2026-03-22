@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mom-offline-v1'
+const CACHE_NAME = 'mom-offline-v2'
 const ASSETS = [
   '/',
   '/index.html',
