@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useVaultStore } from '@/stores/vaultStore'
 import { useUIStore } from '@/stores/uiStore'
 import { cn } from '@/lib/utils'
-import { Lock, Plus, Search, Copy, Eye, EyeOff, Trash2, Globe, Shield, FolderOpen, Cloud, Github, Database, Server } from 'lucide-react'
+import { Lock, Plus, Search, Copy, Eye, EyeOff, Trash2, Globe, Shield, FolderOpen, Cloud, Github, Database, Server, ChevronRight, ChevronDown } from 'lucide-react'
 import type { VaultEntryPlaintext } from '@/types/supabase'
 
 // Platform metadata: icon + color per known platform
@@ -137,6 +137,7 @@ export function VaultPage() {
   const { addToast } = useUIStore()
   const [showNewEntry, setShowNewEntry] = useState(false)
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set())
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
 
   const loadVault = useCallback(() => {
     if (user && cryptoKey) fetchAndDecrypt(user.id, cryptoKey)
@@ -147,7 +148,17 @@ export function VaultPage() {
   const toggleReveal = (id: string) => {
     setRevealedIds((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleCategory = (cat: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev)
+      if (next.has(cat)) next.delete(cat)
+      else next.add(cat)
       return next
     })
   }
@@ -227,13 +238,19 @@ export function VaultPage() {
               }, {} as Record<string, typeof entries>)
             ).sort(([a], [b]) => a.localeCompare(b)).map(([platform, catEntries]) => {
               const meta = getPlatformMeta(platform)
+              const isExpanded = expandedCategories.has(platform) || searchQuery.trim().length > 0
+              
               return (
-                <div key={platform}>
+                <div key={platform} className="group">
                   {/* Platform folder header */}
                   <div
-                    className="flex items-center gap-2 mb-2 px-3 py-2 border-l-2"
+                    onClick={() => toggleCategory(platform)}
+                    className="flex items-center gap-2 mb-2 px-3 py-2 border-l-2 cursor-pointer hover:brightness-110 active:brightness-90 transition-all select-none"
                     style={{ borderColor: meta.color, background: `${meta.color}10` }}
                   >
+                    <span style={{ color: meta.color }} className="transition-transform duration-200">
+                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </span>
                     <span style={{ color: meta.color }}>{meta.icon}</span>
                     <span
                       className="text-[10px] font-black uppercase tracking-widest"
@@ -241,13 +258,14 @@ export function VaultPage() {
                     >
                       {platform}
                     </span>
-                    <span className="ml-auto text-[9px] text-on-surface-variant/40">
-                      {catEntries.length} {catEntries.length === 1 ? 'entry' : 'entries'}
+                    <span className="ml-auto text-[9px] text-on-surface-variant/40 font-mono">
+                      {catEntries.length} {catEntries.length === 1 ? 'ITEM' : 'ITEMS'}
                     </span>
                   </div>
 
                   {/* Entries within this platform folder */}
-                  <div className="space-y-2 pl-3">
+                  {isExpanded && (
+                    <div className="space-y-2 pl-3 animate-in fade-in slide-in-from-top-1 duration-200">
                     {catEntries.map((entry) => {
                       const revealed = revealedIds.has(entry.id)
                       const hasPassword = entry.plaintext.password && entry.plaintext.password.length > 0
@@ -296,9 +314,10 @@ export function VaultPage() {
                       )
                     })}
                   </div>
-                </div>
-              )
-            })}
+                )}
+              </div>
+            )
+          })}
           </div>
         )}
       </div>
