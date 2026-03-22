@@ -13,6 +13,7 @@ export interface RoadmapDay {
     title: string
     description: string
     estimated_minutes: number
+    scheduled_time: string // e.g. "07:00 AM" or "Afternoon"
   }>
 }
 
@@ -88,13 +89,25 @@ export async function generateRoadmap(
   description: string,
   deadline: string,
   daysTotal: number,
-  dailyBudgetMinutes: number
+  dailyBudgetMinutes: number,
+  momentum: 'normal' | 'simplify' | 'accelerate' = 'normal',
+  unavailability: Array<{ dayOfWeek: string; start: string; end: string; title: string }> = []
 ): Promise<RoadmapResponse> {
   const cappedDays = Math.min(daysTotal || 14, 14)
   const system = `You are MOM, your friendly and supportive personal manager. 
-  Generate a realistic, high-fidelity day-by-day tactical roadmap based on the operator's specific constraints, experience level, and motivation.
-  Avoid generic advice. Tailor every task to the provided context.
-  Respond ONLY with valid JSON matching this schema: { "days": [{ "day_number": 1, "tasks": [{ "title": "...", "description": "...", "estimated_minutes": 30 }] }] }`
+  
+  ADAPTIVE CALIBRATION:
+  - Phase: ${momentum.toUpperCase()}
+  - Simplify: If users are struggling, break tasks into 'micro-steps' to build momentum.
+  - Accelerate: If users are crushing it, increase challenge and intensity.
+
+  SCHEDULING PROTOCOL:
+  - Operator Unavailability: ${JSON.stringify(unavailability)}
+  - Rule: Assign a specific 'scheduled_time' (HH:MM AM/PM) for each task.
+  - Rule: NEVER assign tasks during unavailable windows.
+  - Rule: Space tasks realistically based on the Daily Budget (${dailyBudgetMinutes} mins).
+
+  Respond ONLY with valid JSON matching this schema: { "days": [{ "day_number": 1, "tasks": [{ "title": "...", "description": "...", "estimated_minutes": 30, "scheduled_time": "08:00 AM" }] }] }`
 
   const user = `MISSION: ${title}
 CATEGORY: ${category}

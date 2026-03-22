@@ -160,17 +160,30 @@ export function DashboardPage() {
                   <div className={cn("w-1", completed ? 'bg-outline-variant' : accentColor)} />
                   <div className="p-4 flex-grow space-y-2">
                     <div className="flex justify-between items-start">
-                      <span className="bg-surface-highest text-[10px] font-bold px-2 py-0.5 border border-outline-variant text-on-surface-variant uppercase tracking-tighter">
-                        {task.goal?.category || task.goal?.title || 'TASK'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="bg-surface-highest text-[10px] font-bold px-2 py-0.5 border border-outline-variant text-on-surface-variant uppercase tracking-tighter">
+                          {task.goal?.category || task.goal?.title || 'TASK'}
+                        </span>
+                        {(task.goal as any)?.momentum_score < 70 && (
+                          <span className="text-[8px] font-black uppercase text-primary animate-pulse">Momentum Reset: Simple</span>
+                        )}
+                      </div>
                       {task.estimated_minutes && (
                         <span className="text-secondary text-[10px] font-bold">~{task.estimated_minutes} MIN</span>
                       )}
                     </div>
                     <div>
-                      <h3 className={cn("text-[15px] font-bold", completed ? "line-through text-on-surface-variant" : "text-on-surface")}>
-                        {task.title}
-                      </h3>
+                      <div className="flex flex-col">
+                        <h3 className={cn("text-[15px] font-bold", completed ? "line-through text-on-surface-variant" : "text-on-surface")}>
+                          {task.title}
+                        </h3>
+                        {(task as any).scheduled_time && (
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <Clock className="w-3 h-3 text-primary/60" />
+                            <span className="text-[10px] font-bold text-primary/80 uppercase">@{ (task as any).scheduled_time }</span>
+                          </div>
+                        )}
+                      </div>
                       {task.description && (
                         <p className="text-xs text-on-surface-variant mt-1 line-clamp-2">{task.description}</p>
                       )}

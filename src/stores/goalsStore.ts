@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
 import { redistribute } from '@/lib/redistribution'
+import { generateRoadmap } from '@/lib/azure'
 import type { Database } from '@/types/supabase'
 
 type Goal = Database['public']['Tables']['goals']['Row']
@@ -81,6 +82,15 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
   updateTaskStatus: async (taskId: string, status: 'done' | 'skipped' | 'pending') => {
     // 1. Update task in DB
     await supabase.from('tasks').update({ status }).eq('id', taskId)
+
+    // Momentum shift: Success = +5, Failure/Undo = adjustment
+    if (status === 'done') {
+      const task = get().todayTasks.find(t => t.id === taskId)
+      const goal = get().goals.find((g: any) => g.id === (task as any)?.goal?.id)
+      if (goal) {
+        await supabase.rpc('increment_momentum', { goal_id: goal.id, amount: 5 })
+      }
+    }
     
     // 2. Local state update
     set((state) => ({
@@ -169,31 +179,49 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       const pendingTasks = (day.tasks ?? []).filter((t: any) => t.status === 'pending')
       
       if (pendingTasks.length > 0) {
-        // Fetch future days for this goal
+        // Fetch future days for AI context
         const { data: futureDays } = await supabase
           .from('goal_days')
-          .select('*, tasks(*)')
+          .select('id, day_number, scheduled_date')
           .eq('goal_id', day.goal_id)
           .gt('scheduled_date', today)
           .order('day_number', { ascending: true })
 
         if (futureDays && futureDays.length > 0) {
-          const result = redistribute(day.day_number, pendingTasks, futureDays as any, 180)
+          const { data: goal } = await supabase.from('goals').select('*').eq('id', day.goal_id).single()
+          const { data: profile } = await supabase.from('profiles').select('unavailability_schedule').eq('id', userId).single()
           
-          if (result.updatedDays.length > 0) shifted = true;
+          if (goal) {
+            shifted = true;
+            const tone = goal.momentum_score < 70 ? 'simplify' : (goal.momentum_score > 130 ? 'accelerate' : 'normal')
 
-          for (const update of result.updatedDays) {
-            for (const t of update.tasks) {
-              const { id, ...newTask } = t as any
-              await supabase.from('tasks').insert({
-                ...newTask,
-                goal_day_id: update.dayId,
-                user_id: userId,
-                status: 'pending',
-                redistributed: true,
-                original_day_number: day.day_number
-              })
+            // AI Regeneration of the remaining roadmap
+            const roadmap = await generateRoadmap(
+              goal.title, goal.category, 
+              `ADAPTIVE SHIFT: User missed Day ${day.day_number}. REBUILD the plan for the remaining ${futureDays.length} days. Momentum is ${tone.toUpperCase()}. If simplify, make tasks significantly easier to rebuild confidence.`,
+              goal.deadline, futureDays.length, goal.daily_budget_minutes,
+              tone, profile?.unavailability_schedule || []
+            )
+
+            // Clear old future tasks to prevent duplicates
+            const futureDayIds = futureDays.map((d: any) => d.id)
+            await supabase.from('tasks').delete().in('goal_day_id', futureDayIds)
+
+            for (let i = 0; i < roadmap.days.length; i++) {
+              const aiDay = roadmap.days[i]
+              const dbDayId = futureDays[i]?.id
+              if (!dbDayId) continue
+
+              await supabase.from('tasks').insert(aiDay.tasks.map((t: any, idx: number) => ({
+                goal_day_id: dbDayId, user_id: userId,
+                title: t.title, description: t.description,
+                estimated_minutes: t.estimated_minutes,
+                scheduled_time: t.scheduled_time || 'TBD',
+                status: 'pending', redistributed: true,
+                original_day_number: day.day_number, display_order: idx
+              })))
             }
+            await supabase.rpc('increment_momentum', { goal_id: day.goal_id, amount: -15 })
           }
         }
         
