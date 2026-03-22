@@ -14,7 +14,7 @@ interface AuthState {
   profile: Profile | null
   cryptoKey: CryptoKey | null
   isLoading: boolean
-  setSession: (session: Session | null) => void
+  setSession: (session: Session | null) => Promise<void>
   setCryptoKey: (key: CryptoKey | null) => void
   fetchProfile: (userId: string) => Promise<void>
   updateProfile: (updates: Partial<Profile>) => void
@@ -30,10 +30,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   cryptoKey: null,
   isLoading: true,
 
-  setSession: (session) => {
+  setSession: async (session) => {
     const user = session?.user ?? null
     set({ session, user, isLoading: false })
-    if (user) get().fetchProfile(user.id)
+    if (user) {
+      get().fetchProfile(user.id)
+      // For OAuth users (GitHub etc.) there is no password — derive key from access_token
+      if (session && !get().cryptoKey) {
+        try {
+          const token = session.access_token
+          const key = await deriveKey(token, user.id)
+          set({ cryptoKey: key })
+        } catch (e) {
+          console.warn('Could not auto-derive vault key for OAuth user:', e)
+        }
+      }
+    }
   },
 
   setCryptoKey: (key) => set({ cryptoKey: key }),

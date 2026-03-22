@@ -31,13 +31,24 @@ function VaultActionWidget({
       <div className="flex items-center gap-2 text-[10px] text-[#6366f1] font-bold uppercase tracking-wider">
         <ShieldCheck size={12} /> SECURE INPUT: {site.toUpperCase()}
       </div>
-      <input 
-        type="password"
-        value={pass}
-        onChange={(e) => setPass(e.target.value)}
-        className="w-full bg-[#131319] border-none text-xs py-1.5 focus:ring-1 focus:ring-[#6366f1] text-[#a3a6ff]"
-        placeholder="Input secret payload..."
-      />
+      <div className="space-y-1">
+        <input 
+          type="password"
+          value={pass}
+          onChange={(e) => setPass(e.target.value)}
+          className="w-full bg-[#131319] border-none text-xs py-1.5 focus:ring-1 focus:ring-[#6366f1] text-[#a3a6ff]"
+          placeholder="Password (optional)..."
+        />
+        <div className="flex items-center justify-between">
+          <p className="text-[9px] text-[#6366f1]/60">Leave blank if no password to store</p>
+          <button
+            onClick={() => onComplete('', category, notes)}
+            className="text-[9px] text-[#a3a6ff]/60 hover:text-[#a3a6ff] underline transition-colors"
+          >
+            No password, just save info
+          </button>
+        </div>
+      </div>
       <button 
         onClick={() => onComplete(pass, category, notes)}
         className="w-full bg-[#6366f1] text-black text-[10px] font-black py-1.5 hover:bg-[#a3a6ff] transition-all"
@@ -319,24 +330,32 @@ export function ChatPage() {
 
   const completeVaultAction = async (msgId: string, pass: string, category?: string, notes?: string) => {
     const msg = useChatStore.getState().messages.find(m => m.id === msgId)
-    if (!msg?.pendingAction || !user || !cryptoKey) return
+    if (!msg?.pendingAction) return
+    if (!user || !cryptoKey) {
+      addToast('Vault key not available. Please log out and log back in.', 'error')
+      return
+    }
 
-    const action = msg.pendingAction
-    const isAdd = action.type === 'ADD_VAULT_ENTRY'
+    try {
+      const action = msg.pendingAction
+      const isAdd = action.type === 'ADD_VAULT_ENTRY'
 
-    await addEntry({
-      site: action.site,
-      username: action.username || '',
-      password: pass,
-      category: category || (isAdd ? action.category : undefined) || 'Personal',
-      notes: notes || (isAdd ? action.notes : undefined) || 'Chat added'
-    }, user.id, cryptoKey)
+      await addEntry({
+        site: action.site,
+        username: action.username || '',
+        password: pass,
+        category: category || (isAdd ? action.category : undefined) || 'Personal',
+        notes: notes || (isAdd ? action.notes : undefined) || 'Saved from Chat'
+      }, user.id, cryptoKey)
 
-    addToast(`Mission Success: ${msg.pendingAction.site} credentials stored.`, 'success')
-    // Remove action from store so it doesn't render again
-    useChatStore.setState(state => ({
-      messages: state.messages.map(m => m.id === msgId ? { ...m, pendingAction: undefined } : m)
-    }))
+      addToast(`Saved to Vault: ${action.site}`, 'success')
+      useChatStore.setState(state => ({
+        messages: state.messages.map(m => m.id === msgId ? { ...m, pendingAction: undefined } : m)
+      }))
+    } catch (err) {
+      console.error('Vault save error:', err)
+      addToast('Failed to save to Vault. Try again.', 'error')
+    }
   }
 
   const startVoiceInput = async () => {
