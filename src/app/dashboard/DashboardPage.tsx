@@ -51,7 +51,7 @@ function ProgressRing({ progress, label, colorClass = 'text-primary' }: Progress
 
 export function DashboardPage() {
   const { user, profile } = useAuthStore()
-  const { todayTasks, goals, updateTaskStatus, skipTask } = useGoalsStore()
+  const { todayTasks, goals, updateTaskStatus, skipTask, rescheduleTask } = useGoalsStore()
 
   const displayName = useMemo(() => {
     return profile?.display_name?.toUpperCase() || 
@@ -177,12 +177,19 @@ export function DashboardPage() {
                         <h3 className={cn("text-[15px] font-bold", completed ? "line-through text-on-surface-variant" : "text-on-surface")}>
                           {task.title}
                         </h3>
-                        {(task as any).scheduled_time && (
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <Clock className="w-3 h-3 text-primary/60" />
-                            <span className="text-[10px] font-bold text-primary/80 uppercase">@{ (task as any).scheduled_time }</span>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1.5 mt-0.5 group/time">
+                          <Clock className="w-3 h-3 text-primary/60" />
+                          <span className="text-[10px] font-bold text-primary/80 uppercase">@{ (task as any).scheduled_time }</span>
+                          <button 
+                            onClick={() => {
+                              const newTime = window.prompt('RESCHEDULE: Enter new time (e.g. 05:00 PM)', (task as any).scheduled_time)
+                              if (newTime) rescheduleTask(task.id, newTime)
+                            }}
+                            className="opacity-0 group-hover/time:opacity-100 ml-2 text-[9px] font-black text-primary hover:underline transition-opacity"
+                          >
+                            [EDIT]
+                          </button>
+                        </div>
                       </div>
                       {task.description && (
                         <p className="text-xs text-on-surface-variant mt-1 line-clamp-2">{task.description}</p>

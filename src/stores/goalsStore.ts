@@ -16,6 +16,7 @@ interface GoalsState {
   fetchTodayTasks: (userId: string) => Promise<void>
   updateTaskStatus: (taskId: string, status: 'done' | 'skipped' | 'pending') => Promise<void>
   skipTask: (taskId: string, userId: string) => Promise<void>
+  rescheduleTask: (taskId: string, newTime: string) => Promise<void>
   redistributeMissedTasks: (userId: string) => Promise<boolean>
 }
 
@@ -23,6 +24,19 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
   goals: [],
   todayTasks: [],
   isLoading: false,
+
+  rescheduleTask: async (taskId: string, newTime: string) => {
+    try {
+      await supabase.from('tasks').update({ scheduled_time: newTime }).eq('id', taskId)
+      set((state) => ({
+        todayTasks: state.todayTasks.map(t => 
+          t.id === taskId ? { ...t, scheduled_time: newTime } : t
+        )
+      }))
+    } catch (error) {
+      console.error('Error rescheduling task:', error)
+    }
+  },
 
   fetchGoals: async (userId: string) => {
     set({ isLoading: true })
