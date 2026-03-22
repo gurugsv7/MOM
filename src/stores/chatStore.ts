@@ -14,6 +14,14 @@ export interface Message {
     category?: string
     notes?: string
   } | {
+    type: 'BATCH_VAULT_REVIEW'
+    entries: Array<{
+      site: string
+      username?: string
+      category?: string
+      notes?: string
+    }>
+  } | {
     type: 'VAULT_LOOKUP'
     site: string
     username: string

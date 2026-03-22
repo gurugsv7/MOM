@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { format } from 'date-fns'
-import { Mic, Plus, Terminal, Send, Zap, Loader2, ShieldCheck, Copy, Eye, EyeOff, Paperclip, X } from 'lucide-react'
+import { Mic, Plus, Terminal, Send, Zap, Loader2, ShieldCheck, Copy, Eye, EyeOff, Paperclip, X, Edit2, Trash2, CheckCircle2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useGoalsStore } from '@/stores/goalsStore'
 import { useChatStore } from '@/stores/chatStore'
@@ -11,6 +11,105 @@ import { processChatIntent, generateMemoryUpdate, pruneMemorySummary } from '@/l
 import { voice } from '@/lib/voice'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
+
+function BatchVaultWidget({
+  entries,
+  onComplete
+}: {
+  entries: Array<{ site: string; username?: string; category?: string; notes?: string }>;
+  onComplete: (finalEntries: Array<{ site: string; username: string; category: string; notes: string }>) => void
+}) {
+  const [list, setList] = useState(entries.map(e => ({ ...e, id: Math.random().toString(36).slice(2) })))
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  const handleUpdate = (id: string, field: string, val: string) => {
+    setList(prev => prev.map(item => item.id === id ? { ...item, [field]: val } : item))
+  }
+
+  const handleRemove = (id: string) => {
+    setList(prev => prev.filter(item => item.id !== id))
+  }
+
+  return (
+    <div className="mt-4 p-4 bg-[#0e0e13] border-l-2 border-[#6366f1] space-y-4 glass-morphism shadow-2xl">
+      <div className="flex items-center gap-2 text-[10px] text-[#a3a6ff] font-bold uppercase tracking-widest">
+        <Loader2 size={12} className="animate-spin" /> 
+        NEURAL EXTRACTION REVIEW ({list.length} ITEMS)
+      </div>
+
+      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+        {list.map((item) => (
+          <div key={item.id} className="p-2 bg-[#131319] border border-[#a3a6ff]/10 hover:border-[#a3a6ff]/30 transition-all group relative">
+            {editingId === item.id ? (
+              <div className="space-y-2">
+                <input 
+                  className="w-full bg-[#1c1c26] text-xs py-1 px-2 border-none focus:ring-1 focus:ring-[#6366f1]"
+                  value={item.site}
+                  onChange={(e) => handleUpdate(item.id, 'site', e.target.value)}
+                  placeholder="Project Name"
+                />
+                <div className="flex gap-2">
+                  <input 
+                    className="flex-1 bg-[#1c1c26] text-[10px] py-1 px-2 border-none"
+                    value={item.username || ''}
+                    onChange={(e) => handleUpdate(item.id, 'username', e.target.value)}
+                    placeholder="Account/User"
+                  />
+                  <input 
+                    className="w-24 bg-[#1c1c26] text-[10px] py-1 px-2 border-none"
+                    value={item.category || ''}
+                    onChange={(e) => handleUpdate(item.id, 'category', e.target.value)}
+                    placeholder="Platform"
+                  />
+                </div>
+                <button 
+                  onClick={() => setEditingId(null)}
+                  className="w-full bg-[#6366f1]/20 text-[#a3a6ff] text-[9px] py-1 font-bold uppercase hover:bg-[#6366f1]/40 transition-colors"
+                >
+                  Confirm Edits
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-[#f9f5fd]">{item.site}</div>
+                  <div className="text-[9px] text-[#a3a6ff]/70 font-mono">
+                    {item.category?.toUpperCase() || 'OTHER'} | {item.username || 'NO ACCOUNT'}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => setEditingId(item.id)} className="p-1 text-[#a3a6ff] hover:text-[#f9f5fd]">
+                    <Edit2 size={12} />
+                  </button>
+                  <button onClick={() => handleRemove(item.id)} className="p-1 text-[#ff4d4d] hover:text-[#ff0000]">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <button 
+        disabled={list.length === 0}
+        onClick={() => onComplete(list.map(({ id, ...rest }) => ({
+          site: rest.site,
+          username: rest.username || '',
+          category: rest.category || 'Other',
+          notes: rest.notes || ''
+        })))}
+        className="w-full bg-[#6366f1] text-black text-[11px] font-black py-2 hover:bg-[#a3a6ff] transition-all disabled:opacity-20 flex items-center justify-center gap-2"
+      >
+        <CheckCircle2 size={14} /> COMMIT {list.length} ENTRIES TO VAULT
+      </button>
+      
+      <p className="text-[9px] text-[#a3a6ff]/40 text-center italic">
+        "Trust but verify. Confirm that no sensitive data is misaligned before encryption."
+      </p>
+    </div>
+  )
+}
 
 function VaultActionWidget({ 
   site, 
@@ -304,26 +403,10 @@ export function ChatPage() {
           notes: result.params.notes
         }
       } else if (result.intent === 'BATCH_VAULT_ENTRIES' && result.params?.entries?.length) {
-        // Auto-save all entries directly — no password needed for project info
-        if (user && cryptoKey) {
-          let savedCount = 0
-          for (const entry of result.params.entries) {
-            try {
-              await addEntry({
-                site: entry.site || 'Unknown',
-                username: entry.username || '',
-                password: entry.password || '',
-                category: entry.category || 'Other',
-                notes: entry.notes || ''
-              }, user.id, cryptoKey)
-              savedCount++
-            } catch (err) {
-              console.error('Batch vault entry failed:', entry, err)
-            }
-          }
-          addToast(`Saved ${savedCount} entries to Vault from screenshot! 📷`, 'success')
-        } else {
-          addToast('Vault key not available — please re-login.', 'error')
+        // Switch to Review mode instead of auto-saving directly
+        pendingAction = {
+          type: 'BATCH_VAULT_REVIEW',
+          entries: result.params.entries
         }
       } else if (result.intent === 'VAULT_LOOKUP' && result.params?.site) {
         const query = result.params.site.toLowerCase()
@@ -380,22 +463,21 @@ export function ChatPage() {
 
   const completeVaultAction = async (msgId: string, pass: string, category?: string, notes?: string) => {
     const msg = useChatStore.getState().messages.find(m => m.id === msgId)
-    if (!msg?.pendingAction) return
+    const action = msg?.pendingAction
+    if (!action || action.type !== 'ADD_VAULT_ENTRY') return
+    
     if (!user || !cryptoKey) {
       addToast('Vault key not available. Please log out and log back in.', 'error')
       return
     }
 
     try {
-      const action = msg.pendingAction
-      const isAdd = action.type === 'ADD_VAULT_ENTRY'
-
       await addEntry({
         site: action.site,
         username: action.username || '',
         password: pass,
-        category: category || (isAdd ? action.category : undefined) || 'Personal',
-        notes: notes || (isAdd ? action.notes : undefined) || 'Saved from Chat'
+        category: category || action.category || 'Other',
+        notes: notes || action.notes || 'Saved from Chat'
       }, user.id, cryptoKey)
 
       addToast(`Saved to Vault: ${action.site}`, 'success')
@@ -405,6 +487,24 @@ export function ChatPage() {
     } catch (err) {
       console.error('Vault save error:', err)
       addToast('Failed to save to Vault. Try again.', 'error')
+    }
+  }
+
+  const completeBatchAction = async (msgId: string, finalEntries: any[]) => {
+    if (!user || !cryptoKey) return
+    try {
+      let savedCount = 0
+      for (const entry of finalEntries) {
+        await addEntry(entry, user.id, cryptoKey)
+        savedCount++
+      }
+      addToast(`Successfully encrypted and vault-locked ${savedCount} projects.`, 'success')
+      useChatStore.setState(state => ({
+        messages: state.messages.map(m => m.id === msgId ? { ...m, pendingAction: undefined } : m)
+      }))
+    } catch (err) {
+      console.error('Batch save error:', err)
+      addToast('Neural commit failed. Check logs.', 'error')
     }
   }
 
@@ -487,7 +587,9 @@ export function ChatPage() {
               {/* Interactive Action Widget */}
               {(() => {
                 const action = msg.pendingAction
-                if (action?.type === 'ADD_VAULT_ENTRY') {
+                if (!action) return null
+
+                if (action.type === 'ADD_VAULT_ENTRY') {
                   return (
                     <VaultActionWidget 
                       site={action.site}
@@ -498,7 +600,15 @@ export function ChatPage() {
                     />
                   )
                 }
-                if (action?.type === 'VAULT_LOOKUP') {
+                if (action.type === 'BATCH_VAULT_REVIEW') {
+                  return (
+                    <BatchVaultWidget 
+                      entries={action.entries}
+                      onComplete={(final) => completeBatchAction(msg.id, final)}
+                    />
+                  )
+                }
+                if (action.type === 'VAULT_LOOKUP') {
                   return (
                     <VaultLookupWidget 
                       msgId={msg.id}

@@ -187,7 +187,9 @@ export async function processChatIntent(
     When user sends a screenshot or image:
     - Carefully read ALL visible text in the image.
     - Identify platform context (GitHub repos, Vercel projects, Netlify sites, Supabase dashboards, etc.)
-    - If the image shows MULTIPLE projects/repos: use intent "BATCH_VAULT_ENTRIES".
+    - **FIDELITY CHECK**: If a project name, account name (username), or platform (category) is not 100% clear from the image, DO NOT save it automatically. 
+    - **CLARIFICATION RULE**: If items are ambiguous (e.g., "Is this GitHub or Vercel?" or "Which account do these belong to?"), set intent to "CHAT" or "DISAMBIGUATE" and ask the user for that specific missing info.
+    - If the image shows MULTIPLE projects/repos and ALL fields are clear: use intent "BATCH_VAULT_ENTRIES".
       params = { entries: [ { site, username, category, notes, password }, ... ] }
       Each project/repo gets its own entry. Example from a GitHub repos screenshot:
         entries: [
@@ -200,7 +202,7 @@ export async function processChatIntent(
           { category: 'Vercel', site: 'brinqo', username: 'Shomesh007', notes: 'brinqo-delta.vercel.app — linked to Shomesh007/brinqo' },
         ]
     - If the image shows a SINGLE project, use "ADD_VAULT_ENTRY" as usual.
-    - momResponse should summarize what was extracted, e.g. "I found 6 GitHub repos and 5 Vercel projects in that screenshot. Saving them all to your Vault now."
+    - momResponse should summarize what was extracted, and if anything was skipped for being unclear, explain why and ask for it.
 
     - params for ADD_VAULT_ENTRY: { site, username, password, category, notes }.
 
