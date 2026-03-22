@@ -20,7 +20,7 @@ const CATEGORIES: { value: GoalCategory; label: string; emoji: string }[] = [
 
 const GOAL_COLORS = ['#6366f1', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#0ea5e9', '#ef4444']
 
-function NewGoalModal({ onClose, onCreated, initialGoal }: { onClose: () => void; onCreated: () => void; initialGoal?: any }) {
+function NewGoalModal({ onClose, onCreated, initialGoal, goals }: { onClose: () => void; onCreated: () => void; initialGoal?: any; goals: any[] }) {
   const { user } = useAuthStore()
   const { addToast } = useUIStore()
   const [form, setForm] = useState({
@@ -34,6 +34,13 @@ function NewGoalModal({ onClose, onCreated, initialGoal }: { onClose: () => void
   const [step, setStep] = useState<'form' | 'generating' | 'preview'>('form')
   const [roadmapData, setRoadmapData] = useState<Awaited<ReturnType<typeof generateRoadmap>> | null>(null)
 
+  const cumulativeLoad = (goals || [])
+    .filter((g: any) => g.status === 'active' && (!initialGoal || g.id !== initialGoal.id))
+    .reduce((sum: number, g: any) => sum + (g.daily_budget_minutes || 0), 0)
+
+  const totalLoad = cumulativeLoad + (form.daily_budget_minutes || 0)
+  const isOverloaded = totalLoad > 480 // 8 hours soft limit
+
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) return
@@ -44,7 +51,8 @@ function NewGoalModal({ onClose, onCreated, initialGoal }: { onClose: () => void
       if (daysTotal < 1) throw new Error('Deadline must be in the future')
 
       const roadmap = await generateRoadmap(
-        form.title, form.category, form.description,
+        form.title, form.category, 
+        `${form.description}\n\n[STRATEGIC CONTEXT]: User already has ${cumulativeLoad}m/day of active goals. Plan efficiently. If total exceeds 480m, suggest trimming.`,
         form.deadline, daysTotal, form.daily_budget_minutes
       )
       setRoadmapData(roadmap)
@@ -187,6 +195,20 @@ function NewGoalModal({ onClose, onCreated, initialGoal }: { onClose: () => void
                   style={{ background: c, borderRadius: 0 }} />
               ))}
             </div>
+
+            {/* Burnout Shield Warning */}
+            {isOverloaded && (
+              <div className="bg-primary/10 border border-primary/20 p-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="flex items-center gap-2 mb-1">
+                  <Zap className="w-3.5 h-3.5 text-primary" />
+                  <p className="text-[10px] font-black uppercase text-primary tracking-widest">Strategic Overload Risk</p>
+                </div>
+                <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                  Total daily load: <span className="text-primary font-bold">{Math.floor(totalLoad / 60)}h {totalLoad % 60}m</span>. 
+                  MOM suggests capping this mission at <span className="text-white">{(480 - cumulativeLoad)}m</span> or scaling back intensity.
+                </p>
+              </div>
+            )}
 
             <button type="submit"
               className="w-full py-3 bg-gradient-to-r from-primary to-primary/80 text-black text-xs font-black uppercase tracking-widest btn-press"
@@ -400,6 +422,7 @@ export function GoalsPage() {
           }} 
           onCreated={load} 
           initialGoal={editingGoal}
+          goals={goals}
         />
       )}
     </div>
