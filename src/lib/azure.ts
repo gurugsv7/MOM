@@ -91,11 +91,15 @@ export async function generateRoadmap(
   daysTotal: number,
   dailyBudgetMinutes: number,
   momentum: 'normal' | 'simplify' | 'accelerate' = 'normal',
-  unavailability: Array<{ dayOfWeek: string; start: string; end: string; title: string }> = []
+  unavailability: Array<{ dayOfWeek: string; start: string; end: string; title: string }> = [],
+  nichePrompt?: string
 ): Promise<RoadmapResponse> {
   const cappedDays = Math.min(daysTotal || 14, 14)
   const system = `You are MOM, your friendly and supportive personal manager. 
   
+  NICHE EXPERTISE:
+  ${nichePrompt || 'Generate a standard tactical roadmap.'}
+
   ADAPTIVE CALIBRATION:
   - Phase: ${momentum.toUpperCase()}
   - Simplify: If users are struggling, break tasks into 'micro-steps' to build momentum.

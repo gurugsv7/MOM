@@ -6,7 +6,8 @@ import { supabase } from '@/lib/supabase'
 import { generateRoadmap } from '@/lib/azure'
 import { cn } from '@/lib/utils'
 import { Plus, ChevronDown, ChevronUp, Target, Calendar, Zap } from 'lucide-react'
-import { format, differenceInDays } from 'date-fns'
+import { format, differenceInDays, addDays } from 'date-fns'
+import { GOAL_TEMPLATES, type GoalTemplate } from '@/lib/templates'
 import type { GoalCategory } from '@/types/supabase'
 
 const CATEGORIES: { value: GoalCategory; label: string; emoji: string }[] = [
@@ -30,9 +31,23 @@ function NewGoalModal({ onClose, onCreated, initialGoal, goals }: { onClose: () 
     deadline: initialGoal?.deadline || '',
     daily_budget_minutes: initialGoal?.daily_budget_minutes || 60,
     color: initialGoal?.color || GOAL_COLORS[0],
+    nichePrompt: ''
   })
-  const [step, setStep] = useState<'form' | 'generating' | 'preview'>('form')
+  const [step, setStep] = useState<'template' | 'form' | 'generating' | 'preview'>(initialGoal ? 'form' : 'template')
   const [roadmapData, setRoadmapData] = useState<Awaited<ReturnType<typeof generateRoadmap>> | null>(null)
+
+  const selectTemplate = (t: GoalTemplate) => {
+    setForm({
+      ...form,
+      title: t.title,
+      category: t.category.toLowerCase() as GoalCategory,
+      description: t.description,
+      daily_budget_minutes: t.dailyBudget,
+      deadline: format(addDays(new Date(), t.durationDays), 'yyyy-MM-dd'),
+      nichePrompt: t.nichePrompt
+    })
+    setStep('form')
+  }
 
   const cumulativeLoad = (goals || [])
     .filter((g: any) => g.status === 'active' && (!initialGoal || g.id !== initialGoal.id))
@@ -52,8 +67,9 @@ function NewGoalModal({ onClose, onCreated, initialGoal, goals }: { onClose: () 
 
       const roadmap = await generateRoadmap(
         form.title, form.category, 
-        `${form.description}\n\n[STRATEGIC CONTEXT]: User already has ${cumulativeLoad}m/day of active goals. Plan efficiently. If total exceeds 480m, suggest trimming.`,
-        form.deadline, daysTotal, form.daily_budget_minutes
+        `${form.description}\n\n[STRATEGIC CONTEXT]: User already has ${cumulativeLoad}m/day of active goals. Plan efficiently.`,
+        form.deadline, daysTotal, form.daily_budget_minutes,
+        'normal', [], form.nichePrompt
       )
       setRoadmapData(roadmap)
       setStep('preview')
@@ -101,7 +117,7 @@ function NewGoalModal({ onClose, onCreated, initialGoal, goals }: { onClose: () 
 
       if (gDay) {
         await supabase.from('tasks').insert(
-          day.tasks.map((t, i) => ({
+          day.tasks.map((t: any, i: number) => ({
             goal_day_id: gDay.id, user_id: user.id,
             title: t.title, description: t.description,
             estimated_minutes: t.estimated_minutes,
@@ -122,10 +138,37 @@ function NewGoalModal({ onClose, onCreated, initialGoal, goals }: { onClose: () 
       <div className="w-full max-w-sm bg-surface border-t border-outline-variant pb-8 pt-6 px-6 animate-slide-up max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-sm font-black uppercase tracking-widest text-on-surface">
-            {step === 'form' ? 'NEW MISSION' : step === 'generating' ? 'AI GENERATING...' : 'ROADMAP PREVIEW'}
+            {step === 'template' ? 'SELECT ARCHETYPE' : step === 'form' ? 'MISSION CONFIG' : step === 'generating' ? 'AI GENERATING...' : 'ROADMAP PREVIEW'}
           </h3>
           <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface text-lg">✕</button>
         </div>
+
+        {step === 'template' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto pr-2 scrollbar-none">
+              <button 
+                onClick={() => setStep('form')}
+                className="flex flex-col items-center justify-center gap-3 p-4 bg-surface-highest border border-primary/40 text-center transition-all hover:bg-primary/10 group"
+              >
+                <Plus className="text-primary group-hover:scale-110 transition-transform" />
+                <span className="text-[10px] font-black uppercase tracking-tighter">Blank Mission</span>
+              </button>
+              {GOAL_TEMPLATES.map(t => (
+                <button 
+                  key={t.id}
+                  onClick={() => selectTemplate(t)}
+                  className="flex flex-col items-center justify-center gap-3 p-4 bg-surface-high border border-outline-variant text-center transition-all hover:border-primary/60 hover:bg-surface-highest group"
+                >
+                  <t.icon className="text-on-surface-variant group-hover:text-primary transition-colors" size={24} />
+                  <span className="text-[10px] font-black uppercase tracking-tighter leading-tight">{t.title}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-[9px] text-center text-on-surface-variant/60 font-medium uppercase tracking-widest py-2">
+              Each archetype includes niche-optimized AI parameters
+            </p>
+          </div>
+        )}
 
         {step === 'form' && (
           <form onSubmit={handleGenerate} className="space-y-4">
