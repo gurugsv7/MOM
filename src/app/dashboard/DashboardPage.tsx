@@ -1,12 +1,11 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { useGoalsStore } from '@/stores/goalsStore'
-import { Check, FastForward, Clock, Activity, Target, Zap, AlertTriangle } from 'lucide-react'
+import { useUIStore } from '@/stores/uiStore'
+import { Check, FastForward, Clock, Activity, Target, Zap, AlertTriangle, ChevronRight, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format, addDays } from 'date-fns'
-import { supabase } from '@/lib/supabase'
 import { GOAL_TEMPLATES, type GoalTemplate } from '@/lib/templates'
-import { ChevronRight, Plus } from 'lucide-react'
 
 interface ProgressRingProps {
   progress: number
@@ -53,7 +52,8 @@ function ProgressRing({ progress, label, colorClass = 'text-primary' }: Progress
 
 export function DashboardPage() {
   const { user, profile } = useAuthStore()
-  const { todayTasks, goals, updateTaskStatus, skipTask, rescheduleTask } = useGoalsStore()
+  const { todayTasks, goals, updateTaskStatus, skipTask, rescheduleTask, setPendingGoal } = useGoalsStore()
+  const { setActiveTab } = useUIStore()
 
   const displayName = useMemo(() => {
     return profile?.display_name?.toUpperCase() || 
@@ -329,8 +329,19 @@ export function DashboardPage() {
 
               <button 
                 onClick={() => {
-                  // Navigate to Goals page with template pre-selected
-                  window.location.href = `/goals?template=${selectedTemplate?.id || 'custom'}`;
+                  if (selectedTemplate) {
+                    setPendingGoal({
+                      title: selectedTemplate.title,
+                      category: selectedTemplate.category,
+                      description: selectedTemplate.description,
+                      deadline: addDays(new Date(), selectedTemplate.durationDays).toISOString().split('T')[0],
+                      daily_budget_minutes: selectedTemplate.dailyBudget,
+                      nichePrompt: selectedTemplate.nichePrompt
+                    })
+                    setActiveTab('chat')
+                  } else {
+                    setActiveTab('goals')
+                  }
                 }}
                 className="w-full bg-primary text-black py-4 text-sm font-bold uppercase tracking-widest shadow-lg hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
               >

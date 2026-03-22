@@ -5,7 +5,7 @@ import { useUIStore } from '@/stores/uiStore'
 import { supabase } from '@/lib/supabase'
 import { generateRoadmap } from '@/lib/azure'
 import { cn } from '@/lib/utils'
-import { Plus, ChevronDown, ChevronUp, Target, Calendar, Zap } from 'lucide-react'
+import { Plus, ChevronDown, ChevronUp, Target, Calendar, Zap, ListTodo, Clock } from 'lucide-react'
 import { format, differenceInDays, addDays } from 'date-fns'
 import { GOAL_TEMPLATES, type GoalTemplate } from '@/lib/templates'
 import type { GoalCategory } from '@/types/supabase'
@@ -23,7 +23,8 @@ const GOAL_COLORS = ['#6366f1', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#0e
 
 function NewGoalModal({ onClose, onCreated, initialGoal, goals, preSelectedTemplate }: { onClose: () => void; onCreated: () => void; initialGoal?: any; goals: any[]; preSelectedTemplate?: GoalTemplate | null }) {
   const { user } = useAuthStore()
-  const { addToast } = useUIStore()
+  const { addToast, setActiveTab } = useUIStore()
+  const { setPendingGoal } = useGoalsStore()
 
   const [form, setForm] = useState({
     title: initialGoal?.title || preSelectedTemplate?.title || '',
@@ -63,25 +64,19 @@ function NewGoalModal({ onClose, onCreated, initialGoal, goals, preSelectedTempl
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) return
-    setStep('generating')
+    
+    // Set the pending goal state for Chat to pick up
+    setPendingGoal({
+      title: form.title,
+      category: form.category,
+      description: form.description,
+      deadline: form.deadline,
+      daily_budget_minutes: form.daily_budget_minutes,
+      nichePrompt: form.nichePrompt
+    })
 
-    try {
-      const daysTotal = differenceInDays(new Date(form.deadline), new Date())
-      if (daysTotal < 1) throw new Error('Deadline must be in the future')
-
-      const roadmap = await generateRoadmap(
-        form.title, form.category, 
-        `${form.description}\n\n[STRATEGIC CONTEXT]: User already has ${cumulativeLoad}m/day of active goals. Plan efficiently.`,
-        form.deadline, daysTotal, form.daily_budget_minutes,
-        'normal', [], form.nichePrompt
-      )
-      setRoadmapData(roadmap)
-      setStep('preview')
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Generation failed'
-      addToast(msg, 'error')
-      setStep('form')
-    }
+    addToast('Transferring to AI Manager for discovery...', 'info')
+    setActiveTab('chat')
   }
 
   const handleConfirm = async () => {
@@ -89,10 +84,13 @@ function NewGoalModal({ onClose, onCreated, initialGoal, goals, preSelectedTempl
 
     let goalId = initialGoal?.id;
 
+    // Destructure to exclude nichePrompt from DB operations
+    const { nichePrompt, ...dbForm } = form;
+
     if (initialGoal) {
       const { error: uErr } = await supabase
         .from('goals')
-        .update({ ...form })
+        .update({ ...dbForm })
         .eq('id', initialGoal.id);
       if (uErr) { addToast('Shields failed: Could not update mission.', 'error'); return; }
       
@@ -101,11 +99,15 @@ function NewGoalModal({ onClose, onCreated, initialGoal, goals, preSelectedTempl
     } else {
       const { data: goal, error: gErr } = await supabase
         .from('goals')
-        .insert({ ...form, user_id: user.id, status: 'active' })
+        .insert({ ...dbForm, user_id: user.id, status: 'active' })
         .select()
         .single();
       
-      if (gErr || !goal) { addToast('Deployment failure: Mission not saved.', 'error'); return; }
+      if (gErr || !goal) { 
+        console.error('Goal insert error:', gErr);
+        addToast('Deployment failure: Mission not saved.', 'error'); 
+        return; 
+      }
       goalId = goal.id;
     }
 
@@ -261,7 +263,7 @@ function NewGoalModal({ onClose, onCreated, initialGoal, goals, preSelectedTempl
               className="w-full py-3 bg-gradient-to-r from-primary to-primary/80 text-black text-xs font-black uppercase tracking-widest btn-press"
               style={{ borderRadius: 0 }}>
               <Zap size={12} className="inline mr-2" />
-              GENERATE ROADMAP WITH AI
+              INITIALIZE AI DISCOVERY
             </button>
           </form>
         )}
@@ -317,6 +319,22 @@ export function GoalsPage() {
   const [intelInput, setIntelInput] = useState<Record<string, string>>({})
   const [isUpdatingIntel, setIsUpdatingIntel] = useState<string | null>(null)
   const [preSelectedTemplate, setPreSelectedTemplate] = useState<GoalTemplate | null>(null)
+  const [viewingRoadmap, setViewingRoadmap] = useState<string | null>(null)
+  const [roadmapDays, setRoadmapDays] = useState<any[]>([])
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false)
+
+  const toggleRoadmap = async (goalId: string) => {
+    if (viewingRoadmap === goalId) {
+      setViewingRoadmap(null)
+      return
+    }
+    
+    setIsHistoryLoading(true)
+    const days = await useGoalsStore.getState().fetchGoalRoadmap(goalId)
+    setRoadmapDays(days)
+    setViewingRoadmap(goalId)
+    setIsHistoryLoading(false)
+  }
 
   const load = useCallback(() => {
     if (user) fetchGoals(user.id)
@@ -335,8 +353,7 @@ export function GoalsPage() {
           setShowNewGoal(true)
         }
       }
-      // Clean up URL
-      window.history.replaceState({}, '', '/goals')
+      // Clean up URL if needed or just handle state
     }
   }, [])
 
@@ -451,15 +468,21 @@ export function GoalsPage() {
 
                     {/* Action Bar */}
                     <div className="flex gap-2">
-                      <button 
-                        onClick={() => {
-                          setEditingGoal(goal);
-                          setShowNewGoal(true);
-                        }}
-                        className="flex-1 py-2.5 bg-surface-highest border border-outline-variant/20 text-[10px] font-black uppercase tracking-widest text-on-surface hover:bg-surface-high transition-colors btn-press"
-                      >
-                        Adjust Plan
-                      </button>
+                       <button 
+                         onClick={() => {
+                           setEditingGoal(goal);
+                           setShowNewGoal(true);
+                         }}
+                         className="flex-1 py-2.5 bg-surface-highest border border-outline-variant/20 text-[10px] font-black uppercase tracking-widest text-on-surface hover:bg-surface-high transition-colors btn-press"
+                       >
+                         Adjust Plan
+                       </button>
+                       <button 
+                         onClick={() => toggleRoadmap(goal.id)}
+                         className="flex-1 py-2.5 bg-primary/10 border border-primary/20 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/20 transition-colors btn-press"
+                       >
+                         {viewingRoadmap === goal.id ? 'HIDE ROADMAP' : 'VIEW ROADMAP'}
+                       </button>
                       <button 
                         onClick={async () => {
                           if (confirm('Delete this goal and all scheduled tasks?') && user) {
@@ -472,6 +495,55 @@ export function GoalsPage() {
                         DELETE GOAL
                       </button>
                     </div>
+
+                    {/* Roadmap View */}
+                    {viewingRoadmap === goal.id && (
+                      <div className="mt-6 border-t border-outline-variant/10 pt-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                        <div className="flex items-center gap-2 mb-4">
+                          <ListTodo className="w-3 h-3 text-primary" />
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface">Mission Roadmap</h4>
+                        </div>
+                        
+                        {isHistoryLoading ? (
+                          <div className="py-8 flex justify-center">
+                            <div className="w-5 h-5 border-2 border-primary border-t-transparent animate-spin" />
+                          </div>
+                        ) : (
+                          <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 scrollbar-none">
+                            {roadmapDays.map((day) => (
+                              <div key={day.id} className="relative pl-6 pb-2 border-l border-outline-variant/20 last:border-l-transparent">
+                                <div className={cn(
+                                  "absolute left-[-5px] top-0 w-2.5 h-2.5 border-2 bg-surface",
+                                  day.status === 'completed' ? "border-primary bg-primary" : "border-outline-variant"
+                                )} />
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-on-surface">
+                                    Day {day.day_number} <span className="text-on-surface-variant/40 ml-1">— {format(new Date(day.scheduled_date), 'MMM dd')}</span>
+                                  </span>
+                                  {day.status === 'completed' && <span className="text-[8px] font-black text-primary uppercase">Mission Success</span>}
+                                  {day.status === 'missed' && <span className="text-[8px] font-black text-warning uppercase">Tactical Shift</span>}
+                                </div>
+                                <div className="space-y-1.5">
+                                  {day.tasks?.map((task: any) => (
+                                    <div key={task.id} className="bg-surface-highest p-3 border border-outline-variant/5">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <p className={cn("text-xs font-bold transition-all", task.status === 'done' ? "text-on-surface-variant line-through" : "text-on-surface")}>
+                                          {task.title}
+                                        </p>
+                                        <div className="flex items-center gap-1.5 text-[9px] text-on-surface-variant/60 font-medium">
+                                          <Clock size={10} /> {task.estimated_minutes}m
+                                        </div>
+                                      </div>
+                                      <p className="text-[10px] text-on-surface-variant leading-relaxed">{task.description}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

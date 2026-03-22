@@ -18,12 +18,18 @@ interface GoalsState {
   skipTask: (taskId: string, userId: string) => Promise<void>
   rescheduleTask: (taskId: string, newTime: string) => Promise<void>
   redistributeMissedTasks: (userId: string) => Promise<boolean>
+  pendingGoal: { title: string; category: string; description: string; deadline: string; daily_budget_minutes: number; nichePrompt?: string } | null
+  setPendingGoal: (goal: GoalsState['pendingGoal']) => void
+  fetchGoalRoadmap: (goalId: string) => Promise<Array<GoalDay & { tasks: Task[] }>>
 }
 
 export const useGoalsStore = create<GoalsState>((set, get) => ({
   goals: [],
   todayTasks: [],
   isLoading: false,
+  pendingGoal: null,
+
+  setPendingGoal: (goal) => set({ pendingGoal: goal }),
 
   rescheduleTask: async (taskId: string, newTime: string) => {
     try {
@@ -260,5 +266,16 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       await supabase.from('goal_days').update({ status: 'missed' }).eq('id', day.id)
     }
     return shifted
+  },
+
+  fetchGoalRoadmap: async (goalId: string) => {
+    const { data: days, error: dErr } = await supabase
+      .from('goal_days')
+      .select('*, tasks(*)')
+      .eq('goal_id', goalId)
+      .order('day_number', { ascending: true })
+
+    if (dErr || !days) return []
+    return days as Array<GoalDay & { tasks: Task[] }>
   }
 }))

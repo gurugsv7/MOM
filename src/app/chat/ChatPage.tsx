@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { format } from 'date-fns'
-import { Mic, Plus, Terminal, Send, Zap, Loader2, ShieldCheck, Copy, Eye, EyeOff, Paperclip, X, Edit2, Trash2, CheckCircle2 } from 'lucide-react'
+import { Mic, Plus, Terminal, Send, Zap, Loader2, ShieldCheck, Copy, Eye, EyeOff, Paperclip, X, Edit2, Trash2, CheckCircle2, Target } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useGoalsStore } from '@/stores/goalsStore'
 import { useChatStore } from '@/stores/chatStore'
@@ -234,7 +234,7 @@ function NeuralMessage({ content, isMom }: { content: string; isMom: boolean }) 
   const parts = cleanContent.split(/(\^.*?\^)/g)
 
   return (
-    <span className={cn(isMom && "font-inter font-medium")}>
+    <span className={cn(isMom && "font-inter font-medium whitespace-pre-wrap")}>
       {parts.map((part, index) => {
         if (part.startsWith('^') && part.endsWith('^')) {
           const text = part.slice(1, -1)
@@ -259,7 +259,7 @@ function NeuralMessage({ content, isMom }: { content: string; isMom: boolean }) 
 
 export function ChatPage() {
   const { user, cryptoKey } = useAuthStore()
-  const { todayTasks, fetchTodayTasks, skipTask } = useGoalsStore()
+  const { todayTasks, fetchTodayTasks, skipTask, pendingGoal, setPendingGoal } = useGoalsStore()
   const { messages, addMessage, isTyping, setTyping } = useChatStore()
   const { entries, addEntry, fetchAndDecrypt } = useVaultStore()
   const { addToast } = useUIStore()
@@ -318,6 +318,19 @@ export function ChatPage() {
     initData()
   }, [user, cryptoKey, fetchTodayTasks, fetchAndDecrypt])
 
+  // Handle Pending Goal Initiation from Goals Page
+  useEffect(() => {
+    if (pendingGoal && user && cryptoKey) {
+      const initMessage = `[SYSTEM: MISSION INITIATION]\nTitle: ${pendingGoal.title}\nCategory: ${pendingGoal.category}\nInitial Context: ${pendingGoal.description || 'None'}\n\nMOM, start a HIGH-SPEED, ONE-QUESTION discovery (4-6 turns total). No filler. IMPORTANT: ALWAYS ask for CORE INTENT (e.g. WHICH language? WHICH diet?). Do NOT guess this. Only assume LOGISTICAL/TECH details (e.g. "I'll use Python" or "₹10k budget?"). EXACTLY ONE question per turn.`
+      
+      // Perform an initiation message
+      handleCommand(initMessage, 'text')
+      
+      // Clear the state so it doesn't re-trigger on refresh
+      setPendingGoal(null)
+    }
+  }, [pendingGoal, user, cryptoKey])
+
   const handleCommand = async (text: string, source: 'text' | 'voice' = 'text', imgBase64?: string) => {
     if (!text.trim() && !imgBase64) return
     if (!user) return
@@ -337,7 +350,7 @@ export function ChatPage() {
         memorySummary
       }
 
-      const historyContext = messages.slice(-6).map(m => ({ role: m.role, content: m.content }))
+      const historyContext = messages.slice(-20).map(m => ({ role: m.role, content: m.content }))
       const result = await processChatIntent(text, context, historyContext, imgBase64 || undefined)
       
       let pendingAction: Message['pendingAction'] | undefined = undefined
@@ -589,19 +602,38 @@ export function ChatPage() {
 
       {/* Chat Feed */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
-        {messages.map((msg) => (
-          <div 
-            key={msg.id} 
-            className={cn(
-              "flex flex-col max-w-[85%] animate-in fade-in slide-in-from-bottom-2",
-              msg.role === 'user' ? "ml-auto items-end" : "items-start"
-            )}
-          >
+        {messages.map((msg) => {
+          const isSystemInit = msg.role === 'user' && msg.content.startsWith('[SYSTEM: MISSION INITIATION]')
+          
+          if (isSystemInit) {
+            const titleMatch = msg.content.match(/Title:\s*(.+)/)
+            const title = titleMatch ? titleMatch[1].trim() : 'MISSION'
+            return (
+              <div key={msg.id} className="flex justify-center my-4 animate-in fade-in slide-in-from-bottom-2">
+                <div className="bg-primary/10 border border-primary/20 px-4 py-2 flex items-center gap-2 shadow-sm relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-50" />
+                  <Target size={14} className="text-primary animate-pulse" />
+                  <span className="text-[10px] font-black uppercase text-primary tracking-widest leading-none mt-0.5">
+                    DEPLOYING {title}
+                  </span>
+                </div>
+              </div>
+            )
+          }
+
+          return (
+            <div 
+              key={msg.id} 
+              className={cn(
+                "flex flex-col max-w-[85%] animate-in fade-in slide-in-from-bottom-2",
+                msg.role === 'user' ? "ml-auto items-end" : "items-start"
+              )}
+            >
             <div className={cn(
               "p-3 text-sm leading-relaxed shadow-sm",
               msg.role === 'mom' 
-                ? "bg-surface-high border-l-2 border-primary relative glass-morphism text-on-surface"
-                : "bg-surface-highest text-on-surface border-r-2 border-secondary text-right"
+                ? "bg-surface-high border-l-2 border-primary relative glass-morphism text-on-surface whitespace-pre-wrap"
+                : "bg-surface-highest text-on-surface border-r-2 border-secondary text-right whitespace-pre-wrap"
             )}>
               {msg.role === 'mom' && (
                 <div className="absolute -top-1.5 -left-1.5">
@@ -657,7 +689,7 @@ export function ChatPage() {
               [{format(new Date(msg.timestamp), 'HH:mm:ss')}]
             </span>
           </div>
-        ))}
+        )})}
         
         {isTyping && (
           <div className="flex items-center gap-2 text-[10px] text-primary font-bold animate-pulse">
