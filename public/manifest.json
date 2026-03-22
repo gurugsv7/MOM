@@ -1,0 +1,22 @@
+{
+  "name": "MOM - My Own Manager",
+  "short_name": "MOM",
+  "description": "Personal Operating System. AI Roadmaps. Adaptive Scheduling. Encrypted Vault.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0e0e13",
+  "theme_color": "#6366f1",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/vite.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

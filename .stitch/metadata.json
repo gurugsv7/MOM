@@ -1,0 +1,36 @@
+{
+  "name": "projects/5292904267737918605",
+  "projectId": "5292904267737918605",
+  "title": "MOM - My Own Manager",
+  "visibility": "PRIVATE",
+  "createTime": "2026-03-22T08:50:00Z",
+  "projectType": "PROJECT_DESIGN",
+  "origin": "STITCH",
+  "deviceType": "MOBILE",
+  "designTheme": {
+    "colorMode": "DARK",
+    "font": "INTER",
+    "customColor": "#6366F1",
+    "saturation": 3,
+    "displayName": "Obsidian Cipher"
+  },
+  "screens": {
+    "login": {
+      "id": "3a1710dd55cb40c387c10467d8ab217a",
+      "sourceScreen": "projects/5292904267737918605/screens/3a1710dd55cb40c387c10467d8ab217a",
+      "width": 780,
+      "height": 1768,
+      "title": "MOM - Login Screen"
+    },
+    "home": {
+      "id": "2f98865b52d0450b9eebb6407df3cdec",
+      "sourceScreen": "projects/5292904267737918605/screens/2f98865b52d0450b9eebb6407df3cdec",
+      "width": 780,
+      "height": 1894,
+      "title": "MOM - Today's Feed"
+    }
+  },
+  "metadata": {
+    "userRole": "OWNER"
+  }
+}
