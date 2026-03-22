@@ -3,8 +3,10 @@ import { useAuthStore } from '@/stores/authStore'
 import { useGoalsStore } from '@/stores/goalsStore'
 import { Check, FastForward, Clock, Activity, Target, Zap, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { format } from 'date-fns'
+import { format, addDays } from 'date-fns'
 import { supabase } from '@/lib/supabase'
+import { GOAL_TEMPLATES, type GoalTemplate } from '@/lib/templates'
+import { ChevronRight, Plus } from 'lucide-react'
 
 interface ProgressRingProps {
   progress: number
@@ -56,8 +58,11 @@ export function DashboardPage() {
   const displayName = useMemo(() => {
     return profile?.display_name?.toUpperCase() || 
            user?.user_metadata?.full_name?.split(' ')[0]?.toUpperCase() || 
-           'WARRIOR'
+           'FRIEND'
   }, [profile, user])
+
+  const [showQuickNewGoal, setShowQuickNewGoal] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<GoalTemplate | null>(null)
 
   const todayStr = format(new Date(), 'EEE dd MMM').toUpperCase()
 
@@ -108,7 +113,7 @@ export function DashboardPage() {
           <div className="flex">
             <div className="bg-primary/20 px-3 py-1 flex items-center gap-2 border border-primary/30 shadow-sm">
                <span className="text-[10px] font-bold uppercase tracking-widest text-primary">STATUS</span>
-               <span className="text-on-surface font-bold text-xs tracking-wide">SYSTEM NOMINAL</span>
+               <span className="text-on-surface font-bold text-xs tracking-wide">SYSTEM ONLINE</span>
             </div>
           </div>
         </section>
@@ -136,7 +141,7 @@ export function DashboardPage() {
 
         {/* Section Label */}
         <div className="flex items-center gap-3">
-          <span className="text-[10px] font-black tracking-[0.2em] text-on-surface-variant uppercase">TODAY'S TASKS</span>
+          <span className="text-[10px] font-bold tracking-widest text-on-surface-variant uppercase">TODAY'S TASKS</span>
           <div className="h-px flex-grow bg-outline-variant/30" />
           <div className="bg-primary/20 border border-primary/40 px-2 py-0.5 text-[10px] font-bold text-primary">
             [{todayTasks.length.toString().padStart(2, '0')}]
@@ -146,8 +151,51 @@ export function DashboardPage() {
         {/* Task List */}
         <section className="space-y-4">
           {sortedTodayTasks.length === 0 ? (
-            <div className="text-center py-8 border border-dashed border-outline-variant text-on-surface-variant text-sm">
-              No tasks scheduled for today.
+            <div className="flex flex-col items-center justify-center py-16 px-6 space-y-10">
+              <div className="text-center space-y-3">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <div className="w-8 h-[1px] bg-primary/20" />
+                  <Target className="text-primary w-4 h-4" />
+                  <div className="w-8 h-[1px] bg-primary/20" />
+                </div>
+                <h2 className="text-xl font-bold text-on-surface tracking-tight">Choose Your Path</h2>
+                <p className="text-xs text-on-surface-variant font-medium opacity-80">You don't have any active goals yet. Select a template to get started.</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full max-w-xl">
+                {GOAL_TEMPLATES.filter(t => ['weight-loss', 'morning-routine', 'programming', 'startup'].includes(t.id)).map(t => (
+                  <button 
+                    key={t.id}
+                    onClick={() => {
+                      setSelectedTemplate(t);
+                      setShowQuickNewGoal(true);
+                    }}
+                    className="flex flex-col gap-4 p-6 bg-surface-high/40 border border-outline-variant/10 hover:border-primary/40 transition-all hover:bg-surface-highest/80 group text-left relative overflow-hidden"
+                  >
+                    <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                      <t.icon size={48} />
+                    </div>
+                    <div className="p-3 bg-primary/10 rounded-lg w-fit group-hover:bg-primary/20 transition-colors">
+                      <t.icon className="text-primary w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-on-surface group-hover:text-primary transition-colors">{t.title}</p>
+                      <p className="text-[10px] text-on-surface-variant/70 leading-relaxed mt-1 line-clamp-2">{t.description}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <button 
+                onClick={() => {
+                  setSelectedTemplate(null);
+                  setShowQuickNewGoal(true);
+                }}
+                className="flex items-center gap-2 text-xs font-medium text-primary hover:underline pt-4"
+              >
+                <Plus size={14} />
+                Create a Custom Goal
+              </button>
             </div>
           ) : (
             sortedTodayTasks.map((task, index) => {
@@ -240,6 +288,59 @@ export function DashboardPage() {
         </section>
 
       </main>
+
+      {showQuickNewGoal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
+          <div className="w-full max-w-sm bg-surface border border-outline-variant p-6 relative animate-slide-up">
+            <button 
+              onClick={() => setShowQuickNewGoal(false)}
+              className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface"
+            >✕</button>
+            
+            <div className="space-y-6">
+              <div className="text-center border-b border-outline-variant/20 pb-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-primary mb-1">Goal Setup</p>
+                <h2 className="text-lg font-bold text-on-surface leading-tight">
+                  {selectedTemplate ? selectedTemplate.title : 'NEW GOAL'}
+                </h2>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-on-surface-variant/60 uppercase">About this goal</p>
+                  <p className="text-sm text-on-surface leading-normal bg-surface-highest/40 p-4 border-l-2 border-primary/40">
+                    {selectedTemplate ? selectedTemplate.description : 'Create a custom roadmap tailored to your specific needs.'}
+                  </p>
+                </div>
+                
+                {selectedTemplate && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-surface-high p-3 border border-outline-variant/10">
+                      <p className="text-[8px] font-bold text-on-surface-variant uppercase">Daily Budget</p>
+                      <p className="text-xs font-black text-on-surface">{selectedTemplate.dailyBudget}m</p>
+                    </div>
+                    <div className="bg-surface-high p-3 border border-outline-variant/10">
+                      <p className="text-[8px] font-bold text-on-surface-variant uppercase">Duration</p>
+                      <p className="text-xs font-black text-on-surface">{selectedTemplate.durationDays} Days</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button 
+                onClick={() => {
+                  // Navigate to Goals page with template pre-selected
+                  window.location.href = `/goals?template=${selectedTemplate?.id || 'custom'}`;
+                }}
+                className="w-full bg-primary text-black py-4 text-sm font-bold uppercase tracking-widest shadow-lg hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                START JOURNEY
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

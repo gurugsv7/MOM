@@ -21,19 +21,23 @@ const CATEGORIES: { value: GoalCategory; label: string; emoji: string }[] = [
 
 const GOAL_COLORS = ['#6366f1', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#0ea5e9', '#ef4444']
 
-function NewGoalModal({ onClose, onCreated, initialGoal, goals }: { onClose: () => void; onCreated: () => void; initialGoal?: any; goals: any[] }) {
+function NewGoalModal({ onClose, onCreated, initialGoal, goals, preSelectedTemplate }: { onClose: () => void; onCreated: () => void; initialGoal?: any; goals: any[]; preSelectedTemplate?: GoalTemplate | null }) {
   const { user } = useAuthStore()
   const { addToast } = useUIStore()
+
   const [form, setForm] = useState({
-    title: initialGoal?.title || '',
-    category: initialGoal?.category || 'habit' as GoalCategory,
-    description: initialGoal?.description || '',
-    deadline: initialGoal?.deadline || '',
-    daily_budget_minutes: initialGoal?.daily_budget_minutes || 60,
+    title: initialGoal?.title || preSelectedTemplate?.title || '',
+    category: initialGoal?.category || (preSelectedTemplate?.category.toLowerCase() as GoalCategory) || 'habit' as GoalCategory,
+    description: initialGoal?.description || preSelectedTemplate?.description || '',
+    deadline: initialGoal?.deadline || (preSelectedTemplate ? format(addDays(new Date(), preSelectedTemplate.durationDays), 'yyyy-MM-dd') : ''),
+    daily_budget_minutes: initialGoal?.daily_budget_minutes || preSelectedTemplate?.dailyBudget || 60,
     color: initialGoal?.color || GOAL_COLORS[0],
-    nichePrompt: ''
+    nichePrompt: preSelectedTemplate?.nichePrompt || ''
   })
-  const [step, setStep] = useState<'template' | 'form' | 'generating' | 'preview'>(initialGoal ? 'form' : 'template')
+
+  const [step, setStep] = useState<'template' | 'form' | 'generating' | 'preview'>(
+    initialGoal ? 'form' : (preSelectedTemplate ? 'form' : 'template')
+  )
   const [roadmapData, setRoadmapData] = useState<Awaited<ReturnType<typeof generateRoadmap>> | null>(null)
 
   const selectTemplate = (t: GoalTemplate) => {
@@ -312,10 +316,29 @@ export function GoalsPage() {
   const [expandedGoal, setExpandedGoal] = useState<string | null>(null)
   const [intelInput, setIntelInput] = useState<Record<string, string>>({})
   const [isUpdatingIntel, setIsUpdatingIntel] = useState<string | null>(null)
+  const [preSelectedTemplate, setPreSelectedTemplate] = useState<GoalTemplate | null>(null)
 
   const load = useCallback(() => {
     if (user) fetchGoals(user.id)
   }, [user, fetchGoals])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const templateId = params.get('template')
+    if (templateId) {
+      if (templateId === 'custom') {
+        setShowNewGoal(true)
+      } else {
+        const template = GOAL_TEMPLATES.find(t => t.id === templateId)
+        if (template) {
+          setPreSelectedTemplate(template)
+          setShowNewGoal(true)
+        }
+      }
+      // Clean up URL
+      window.history.replaceState({}, '', '/goals')
+    }
+  }, [])
 
   useEffect(() => { load() }, [load])
 
@@ -323,7 +346,7 @@ export function GoalsPage() {
     <div className="flex flex-col min-h-full">
       <header className="sticky top-0 z-10 bg-surface/95 backdrop-blur-md px-5 pt-4 pb-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-black uppercase tracking-widest text-on-surface">MISSIONS</h2>
+          <h2 className="text-sm font-bold uppercase tracking-widest text-on-surface">YOUR GOALS</h2>
           <button
             onClick={() => setShowNewGoal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-black text-[10px] font-black uppercase tracking-widest btn-press"
@@ -370,7 +393,7 @@ export function GoalsPage() {
                     {/* Mission Intelligence */}
                     <div className="mt-4">
                       <div className="flex items-center justify-between mb-2">
-                        <p className="text-[10px] uppercase font-black tracking-[0.2em] text-primary">Tactical Intelligence</p>
+                        <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-primary">Goal Details</p>
                       </div>
                       <div className="bg-surface-highest/50 p-4 border-l-2 border-primary/30 space-y-3">
                         {goal.description ? (
@@ -378,12 +401,12 @@ export function GoalsPage() {
                             {goal.description}
                           </p>
                         ) : (
-                          <p className="text-[10px] text-on-surface-variant/40 italic">Waiting for field operations metadata...</p>
+                          <p className="text-[10px] text-on-surface-variant/40 italic">Add a description to keep track of your progress...</p>
                         )}
                         
                         <div className="flex gap-2 pt-2 border-t border-outline-variant/5">
                           <input 
-                            placeholder="Append field intel..."
+                            placeholder="Add a progress note..."
                             className="flex-1 bg-surface-high border-none text-[10px] px-2 py-1.5 focus:ring-1 focus:ring-primary text-on-surface"
                             value={intelInput[goal.id] || ''}
                             onChange={(e) => setIntelInput({ ...intelInput, [goal.id]: e.target.value })}
@@ -397,7 +420,7 @@ export function GoalsPage() {
                                 setIntelInput({ ...intelInput, [goal.id]: '' });
                                 await fetchGoals(user.id);
                                 setIsUpdatingIntel(null);
-                                addToast('Mission dossier updated.', 'success');
+                                addToast('Goal details updated.', 'success');
                               }
                             }}
                           />
@@ -405,7 +428,7 @@ export function GoalsPage() {
                             disabled={isUpdatingIntel === goal.id}
                             className="text-[9px] font-black uppercase text-primary hover:text-white transition-colors"
                           >
-                           {isUpdatingIntel === goal.id ? 'SYNCING...' : 'COMMIT'}
+                           {isUpdatingIntel === goal.id ? 'SAVING...' : 'SAVE NOTE'}
                           </button>
                         </div>
                       </div>
@@ -414,11 +437,11 @@ export function GoalsPage() {
                     {/* Operational Metrics */}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="bg-surface-highest p-3 border border-outline-variant/10 shadow-sm">
-                        <p className="text-[9px] uppercase font-bold text-on-surface-variant/60 tracking-widest mb-1">Time Allocation</p>
+                        <p className="text-[9px] uppercase font-bold text-on-surface-variant/60 tracking-widest mb-1">Daily Commitment</p>
                         <p className="text-sm font-black text-on-surface">{goal.daily_budget_minutes}m<span className="text-[10px] font-normal text-on-surface-variant ml-1">per day</span></p>
                       </div>
                       <div className="bg-surface-highest p-3 border border-outline-variant/10 shadow-sm">
-                        <p className="text-[9px] uppercase font-bold text-on-surface-variant/60 tracking-widest mb-1">Operational Window</p>
+                        <p className="text-[9px] uppercase font-bold text-on-surface-variant/60 tracking-widest mb-1">Remaining Time</p>
                         <p className="text-sm font-black text-primary">
                           {Math.max(0, differenceInDays(new Date(goal.deadline), new Date()))}
                           <span className="text-[10px] font-normal text-on-surface-variant ml-1">days remaining</span>
@@ -435,18 +458,18 @@ export function GoalsPage() {
                         }}
                         className="flex-1 py-2.5 bg-surface-highest border border-outline-variant/20 text-[10px] font-black uppercase tracking-widest text-on-surface hover:bg-surface-high transition-colors btn-press"
                       >
-                        Modify Strategy
+                        Adjust Plan
                       </button>
                       <button 
                         onClick={async () => {
-                          if (confirm('Decommission mission? All intelligence will be archived.') && user) {
+                          if (confirm('Delete this goal and all scheduled tasks?') && user) {
                             await supabase.from('goals').update({ status: 'archived' }).eq('id', goal.id);
                             fetchGoals(user.id);
                           }
                         }}
                         className="px-4 py-2.5 bg-warning/10 border border-warning/20 text-[10px] font-black uppercase tracking-widest text-warning hover:bg-warning/20 transition-colors btn-press"
                       >
-                        Decommission
+                        DELETE GOAL
                       </button>
                     </div>
                   </div>
@@ -462,10 +485,12 @@ export function GoalsPage() {
           onClose={() => {
             setShowNewGoal(false);
             setEditingGoal(null);
+            setPreSelectedTemplate(null);
           }} 
           onCreated={load} 
           initialGoal={editingGoal}
           goals={goals}
+          preSelectedTemplate={preSelectedTemplate}
         />
       )}
     </div>

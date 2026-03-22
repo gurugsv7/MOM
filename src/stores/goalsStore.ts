@@ -62,11 +62,20 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
 
     const today = new Date().toISOString().split('T')[0]
 
+    const { goals } = get()
+    const activeGoalIds = goals.map((g: any) => g.id)
+
+    if (activeGoalIds.length === 0) {
+      set({ todayTasks: [] })
+      return
+    }
+
     const { data: dayData } = await supabase
       .from('goal_days')
       .select('id, goal_id')
       .eq('user_id', userId)
       .eq('scheduled_date', today)
+      .in('goal_id', activeGoalIds)
 
     if (!dayData || dayData.length === 0) {
       set({ todayTasks: [] })
@@ -81,7 +90,6 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       .eq('user_id', userId)
       .order('display_order')
 
-    const { goals } = get()
     const goalMap = new Map(goals.map((g: any) => [g.id, g]))
     const goalIdMap = new Map(dayData.map((d: any) => [d.id, d.goal_id]))
 
@@ -178,12 +186,17 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     const today = new Date().toISOString().split('T')[0]
     let shifted = false
 
-    // 1. Fetch missed days (pending days in the past)
+    // 1. Fetch missed days (pending days in the past) for ACTIVE goals only
+    const { goals } = get()
+    const activeGoalIds = goals.map((g: any) => g.id)
+    if (activeGoalIds.length === 0) return false
+
     const { data: missedDays } = await supabase
       .from('goal_days')
       .select('*, tasks(*)')
       .eq('user_id', userId)
       .eq('status', 'pending')
+      .in('goal_id', activeGoalIds)
       .lt('scheduled_date', today)
       .order('scheduled_date', { ascending: true })
 
