@@ -26,7 +26,7 @@ export function AppLayout() {
   }, [theme])
 
   return (
-    <div className="relative h-screen max-w-sm mx-auto flex flex-col overflow-hidden bg-surface">
+    <div className="relative h-[100dvh] max-w-sm mx-auto flex flex-col overflow-hidden bg-surface">
       <ToastContainer />
 
       <main className="flex-1 overflow-hidden flex flex-col relative">
