@@ -1,6 +1,7 @@
 import { useAuthStore } from '@/stores/authStore'
 import { AuthPage } from '@/app/auth/AuthPage'
 import { AppLayout } from '@/components/AppLayout'
+import { SecurityGate } from '@/components/auth/SecurityGate'
 
 export function App() {
   const { session, isLoading } = useAuthStore()
@@ -30,5 +31,11 @@ export function App() {
     )
   }
 
-  return session ? <AppLayout /> : <AuthPage />
+  return session ? (
+    <SecurityGate>
+      <AppLayout />
+    </SecurityGate>
+  ) : (
+    <AuthPage />
+  )
 }

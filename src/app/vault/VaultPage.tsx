@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useVaultStore } from '@/stores/vaultStore'
 import { useUIStore } from '@/stores/uiStore'
 import { cn } from '@/lib/utils'
-import { Lock, Plus, Search, Copy, Eye, EyeOff, Trash2, Globe, Shield, FolderOpen, Cloud, Github, Database, Server, ChevronRight, ChevronDown } from 'lucide-react'
+import { Lock, Plus, Search, Copy, Eye, EyeOff, Trash2, Globe, Shield, FolderOpen, Cloud, Github, Database, Server, ChevronRight, ChevronDown, Activity } from 'lucide-react'
 import type { VaultEntryPlaintext } from '@/types/supabase'
 
 // Platform metadata: icon + color per known platform
@@ -110,6 +110,52 @@ function NewEntryModal({ onClose, onAdded }: { onClose: () => void; onAdded: () 
   )
 }
 
+function SetKeyModal({ onSet }: { onSet: (pass: string) => void }) {
+  const [pass, setPass] = useState('')
+  const { addToast } = useUIStore()
+
+  const handleSet = () => {
+    if (pass.length < 4) {
+      addToast('Vault key must be at least 4 characters.', 'error')
+      return
+    }
+    onSet(pass)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md px-6">
+      <div className="w-full max-w-sm bg-surface border border-outline-variant p-8 shadow-2xl space-y-6">
+        <div className="text-center space-y-2">
+          <Shield size={32} className="mx-auto text-primary" />
+          <h2 className="text-lg font-black uppercase tracking-[0.2em] text-on-surface">Vault Locked</h2>
+          <p className="text-xs text-on-surface-variant leading-relaxed">
+            Enter your login password to unlock your secure credentials. Your encrypted data is safe in the cloud; this password only unlocks it locally.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <input
+            type="password"
+            autoFocus
+            className="w-full bg-surface-highest text-on-surface px-4 py-3 text-sm border-b-2 border-primary outline-none transition-all focus:bg-surface-high"
+            placeholder="Enter Vault Key..."
+            value={pass}
+            onKeyDown={(e) => e.key === 'Enter' && handleSet()}
+            onChange={(e) => setPass(e.target.value)}
+          />
+
+          <button
+            onClick={handleSet}
+            className="w-full py-4 bg-primary text-black text-[11px] font-black uppercase tracking-widest hover:brightness-110 btn-press"
+          >
+            UNLOCK VAULT
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ClipboardCopy({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false)
   const { addToast } = useUIStore()
@@ -132,10 +178,12 @@ function ClipboardCopy({ text, label }: { text: string; label: string }) {
 }
 
 export function VaultPage() {
-  const { user, cryptoKey } = useAuthStore()
-  const { entries, isLoading, searchQuery, setSearchQuery, fetchAndDecrypt, deleteEntry } = useVaultStore()
+  const { user, cryptoKey, setCryptoKey } = useAuthStore()
+  const { entries, isLoading, lockedCount, searchQuery, setSearchQuery, fetchAndDecrypt, deleteEntry, rotateKey } = useVaultStore()
   const { addToast } = useUIStore()
   const [showNewEntry, setShowNewEntry] = useState(false)
+  const [showKeyReset, setShowKeyReset] = useState(false)
+  const [showPasscodeSetup, setShowPasscodeSetup] = useState(false)
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set())
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
 
@@ -144,6 +192,26 @@ export function VaultPage() {
   }, [user, cryptoKey, fetchAndDecrypt])
 
   useEffect(() => { loadVault() }, [loadVault])
+
+  const handleSetKey = async (pass: string) => {
+    if (!user) return
+    const { deriveKey } = await import('@/lib/crypto')
+    const newKey = await deriveKey(pass, user.id)
+    
+    // If we already had a key and entries, we need to re-encrypt them (Rotation)
+    if (cryptoKey && entries.length > 0) {
+      try {
+        await rotateKey(user.id, cryptoKey, newKey)
+        addToast('Vault key updated and data re-encrypted.', 'success')
+      } catch (e) {
+        addToast('Failed to re-encrypt vault. Please ensure current key is valid.', 'error')
+        return
+      }
+    }
+    
+    setCryptoKey(newKey)
+    setShowKeyReset(false)
+  }
 
   const toggleReveal = (id: string) => {
     setRevealedIds((prev) => {
@@ -205,10 +273,20 @@ export function VaultPage() {
           />
         </div>
 
-        {!cryptoKey && (
-          <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-warning/10 border border-warning/20">
-            <Lock size={11} className="text-warning" />
-            <p className="text-[10px] text-warning">Vault locked — vault key unavailable. Re-login to unlock.</p>
+        {cryptoKey && (
+          <div className="mt-2 flex items-center justify-between px-3 py-1.5 bg-surface-high/50 border border-outline-variant/10">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1">
+                <Shield size={10} className="text-success" />
+                <span className="text-[10px] font-bold text-success">{entries.length} DECRYPTED</span>
+              </div>
+            </div>
+            <button 
+              onClick={() => setShowKeyReset(true)}
+              className="text-[9px] font-bold text-on-surface-variant hover:text-primary transition-colors"
+            >
+              CHANGE KEY
+            </button>
           </div>
         )}
 
@@ -219,6 +297,20 @@ export function VaultPage() {
         {isLoading ? (
           <div className="space-y-2">
             {[1, 2, 3].map(i => <div key={i} className="h-20 bg-surface-high animate-pulse" />)}
+          </div>
+        ) : !cryptoKey ? (
+          <div className="text-center py-16">
+            <Lock size={36} className="mx-auto text-primary mb-4" />
+            <h3 className="text-lg font-bold text-on-surface mb-2">Vault is Locked</h3>
+            <p className="text-on-surface-variant text-sm mb-6 max-w-[200px] mx-auto leading-relaxed">
+              Your vault is <span className="text-primary font-bold">Safe in the Cloud</span> but locked for this local session.
+            </p>
+            <button
+              onClick={() => setShowKeyReset(true)}
+              className="px-6 py-2 bg-primary text-black text-[10px] font-black uppercase tracking-widest"
+            >
+              Enter Key
+            </button>
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16">
@@ -323,6 +415,7 @@ export function VaultPage() {
       </div>
 
       {showNewEntry && <NewEntryModal onClose={() => setShowNewEntry(false)} onAdded={loadVault} />}
+      {(showKeyReset || (user && !cryptoKey)) && <SetKeyModal onSet={handleSetKey} />}
     </div>
   )
 }

@@ -13,7 +13,9 @@ export function AuthPage() {
   const [displayName, setDisplayName] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const { login, signup } = useAuthStore()
+  const [isSettingPasscode, setIsSettingPasscode] = useState(false)
+  const [pin, setPin] = useState('')
+  const { login, signup, setPasscode } = useAuthStore()
   const { addToast } = useUIStore()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -26,16 +28,75 @@ export function AuthPage() {
       } else {
         if (!displayName.trim()) throw new Error('Display name is required')
         await signup(email, password, displayName)
-        addToast('Identity initialized. Welcome to MOM.', 'success')
+        setIsSettingPasscode(true)
+        addToast('Identity initialized. One final step...', 'success')
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Authentication failure'
-      // Treat email-confirm message as info, not error
       const isInfo = msg.toLowerCase().includes('check your email') || msg.toLowerCase().includes('confirm')
       addToast(msg, isInfo ? 'info' : 'error')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSetPasscode = async () => {
+    if (pin.length < 4) return
+    setLoading(true)
+    try {
+      await setPasscode(pin)
+      addToast('Security layer active. Welcome to MOM.', 'success')
+      // No need for further state, store will transition them to App
+    } catch (e) {
+      addToast('Passcode setup failed.', 'error')
+    }
+    setLoading(false)
+  }
+
+  if (isSettingPasscode) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10">
+        <div className="w-full max-w-sm glass-card p-8 space-y-8 animate-in fade-in zoom-in duration-500">
+          <div className="text-center space-y-4">
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-2">
+              <Shield size={32} className="text-primary" />
+            </div>
+            <h2 className="text-2xl font-black uppercase tracking-widest text-[#f9f5fd]">Secure Your Session</h2>
+            <p className="text-xs text-on-surface-variant leading-relaxed">
+              Create a 4-6 digit PIN for quick, secure access on this device.
+            </p>
+          </div>
+
+          <div className="space-y-6">
+            <input
+              type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              className="w-full bg-black/40 text-center text-4xl font-black tracking-[1em] text-primary px-4 py-8 border-b-2 border-primary outline-none transition-all focus:bg-black/60"
+              placeholder="****"
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
+              autoFocus
+            />
+
+            <div className="flex flex-col gap-4">
+              <button
+                onClick={handleSetPasscode}
+                disabled={loading || pin.length < 4}
+                className="w-full py-4 bg-primary text-black text-xs font-black uppercase tracking-widest btn-press disabled:opacity-50"
+              >
+                {loading ? 'Securing...' : 'Establish Security'}
+              </button>
+              
+              <p className="text-[10px] text-center text-on-surface-variant/50 max-w-[200px] mx-auto">
+                This PIN is private to your device and never leaves your browser.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -62,3 +62,20 @@ export async function decryptEntry<T = unknown>(blob: string, iv: string, key: C
 
   return JSON.parse(new TextDecoder().decode(plaintext)) as T
 }
+
+/** Low-level encrypt raw bytes → { blob, iv } */
+export async function encryptRaw(data: BufferSource, key: CryptoKey): Promise<{ blob: string; iv: string }> {
+  const iv = window.crypto.getRandomValues(new Uint8Array(12))
+  const ciphertext = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data as any)
+  return {
+    blob: btoa(String.fromCharCode(...new Uint8Array(ciphertext))),
+    iv: btoa(String.fromCharCode(...iv)),
+  }
+}
+
+/** Low-level decrypt { blob, iv } → raw bytes */
+export async function decryptRaw(blob: string, iv: string, key: CryptoKey): Promise<ArrayBuffer> {
+  const ciphertext = Uint8Array.from(atob(blob), (c) => c.charCodeAt(0))
+  const ivBytes = Uint8Array.from(atob(iv), (c) => c.charCodeAt(0))
+  return await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivBytes }, key, ciphertext)
+}
