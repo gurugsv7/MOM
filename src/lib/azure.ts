@@ -25,8 +25,9 @@ function buildUrl(path: string) {
 }
 
 async function azureChat(
-  messages: Array<{ role: string; content: string }>,
-  jsonMode: boolean = false
+  messages: Array<{ role: string; content: string | any[] }>,
+  jsonMode: boolean = false,
+  imageBase64?: string
 ): Promise<string> {
   if (!ENDPOINT || !API_KEY) {
     throw new Error('Azure OpenAI credentials not configured. Add VITE_AZURE_OPENAI_ENDPOINT and VITE_AZURE_OPENAI_API_KEY to .env')
@@ -37,13 +38,32 @@ async function azureChat(
     body.response_format = { type: 'json_object' }
   }
 
+  // If image provided, convert last user message to vision format
+  const processedMessages = imageBase64
+    ? messages.map((m, i) => {
+        if (i === messages.length - 1 && m.role === 'user') {
+          return {
+            role: 'user',
+            content: [
+              { type: 'text', text: m.content as string },
+              {
+                type: 'image_url',
+                image_url: { url: `data:image/jpeg;base64,${imageBase64}`, detail: 'high' }
+              }
+            ]
+          }
+        }
+        return m
+      })
+    : messages
+
   const res = await fetch(buildUrl('chat/completions'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'api-key': API_KEY,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, messages: processedMessages }),
   })
 
   if (!res.ok) {
@@ -121,7 +141,11 @@ Rewrite each task title and description to flow naturally with the day's other t
   return parsed.tasks ?? redistributedTasks
 }
 
-export async function processChatIntent(userMessage: string, context: { todayTasks: any[], vaultSites: string[], activeGoals: { id: string, title: string }[], memorySummary: string }) {
+export async function processChatIntent(
+  userMessage: string,
+  context: { todayTasks: any[], vaultSites: string[], activeGoals: { id: string, title: string }[], memorySummary: string },
+  imageBase64?: string
+) {
   const prompt = `
     Analyze user input for the MOM (My Own Manager) Tactical OS.
     
@@ -136,7 +160,7 @@ export async function processChatIntent(userMessage: string, context: { todayTas
     
     Return ONLY a raw JSON object (no markdown):
     {
-      "intent": "ADD_GOAL" | "ADD_TASK" | "ADD_VAULT_ENTRY" | "VAULT_LOOKUP" | "SKIP_TASK" | "STATUS_CHECK" | "CHAT" | "DISAMBIGUATE",
+      "intent": "ADD_GOAL" | "ADD_TASK" | "ADD_VAULT_ENTRY" | "BATCH_VAULT_ENTRIES" | "VAULT_LOOKUP" | "SKIP_TASK" | "STATUS_CHECK" | "CHAT" | "DISAMBIGUATE",
       "params": { ... },
       "momResponse": "Your response: Friendly, supportive, and extremely helpful. Keep it concise."
     }
@@ -158,6 +182,25 @@ export async function processChatIntent(userMessage: string, context: { todayTas
       → category: 'Netlify', site: 'General', username: 'guru@email.com'
     - "Supabase project key is xyz for portfolio"
       → category: 'Supabase', site: 'Portfolio', username: 'guru@email.com', password: 'xyz'
+
+    --- IMAGE ANALYSIS DOCTRINE ---
+    When user sends a screenshot or image:
+    - Carefully read ALL visible text in the image.
+    - Identify platform context (GitHub repos, Vercel projects, Netlify sites, Supabase dashboards, etc.)
+    - If the image shows MULTIPLE projects/repos: use intent "BATCH_VAULT_ENTRIES".
+      params = { entries: [ { site, username, category, notes, password }, ... ] }
+      Each project/repo gets its own entry. Example from a GitHub repos screenshot:
+        entries: [
+          { category: 'GitHub', site: 'lykarealty', username: 'Shomesh007', notes: 'GitHub repo' },
+          { category: 'GitHub', site: 'zuaera', username: 'Shomesh007', notes: 'GitHub repo' },
+        ]
+      From a Vercel projects screenshot:
+        entries: [
+          { category: 'Vercel', site: 'hintio', username: 'Shomesh007', notes: 'hintio.vercel.app — linked to Shomesh007/hintio' },
+          { category: 'Vercel', site: 'brinqo', username: 'Shomesh007', notes: 'brinqo-delta.vercel.app — linked to Shomesh007/brinqo' },
+        ]
+    - If the image shows a SINGLE project, use "ADD_VAULT_ENTRY" as usual.
+    - momResponse should summarize what was extracted, e.g. "I found 6 GitHub repos and 5 Vercel projects in that screenshot. Saving them all to your Vault now."
 
     - params for ADD_VAULT_ENTRY: { site, username, password, category, notes }.
 
@@ -185,10 +228,11 @@ export async function processChatIntent(userMessage: string, context: { todayTas
     - [UX TONE] Friendly Personal Manager. Be supportive and warm. avoid heavy military or tactical jargon. No excessive use of bold (**). Be brief but clear.
   `
 
+  const userContent = userMessage || (imageBase64 ? 'Analyze this screenshot and extract all visible project/account information for the vault.' : '')
   const content = await azureChat([
     { role: 'system', content: 'You are MOM, a friendly and helpful personal manager assistant.' },
-    { role: 'user', content: prompt }
-  ], true)
+    { role: 'user', content: prompt + `\n\nUser Message: "${userContent}"` }
+  ], true, imageBase64)
 
   return JSON.parse(content)
 }

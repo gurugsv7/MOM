@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { format } from 'date-fns'
-import { Mic, Plus, Terminal, Send, Zap, Loader2, ShieldCheck, Copy, Eye, EyeOff } from 'lucide-react'
+import { Mic, Plus, Terminal, Send, Zap, Loader2, ShieldCheck, Copy, Eye, EyeOff, Paperclip, X } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useGoalsStore } from '@/stores/goalsStore'
 import { useChatStore } from '@/stores/chatStore'
@@ -134,7 +134,31 @@ export function ChatPage() {
   
   const [input, setInput] = useState('')
   const [memorySummary, setMemorySummary] = useState('')
+  const [imageBase64, setImageBase64] = useState<string | null>(null)
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string
+      // extract pure base64 (strip data:image/...;base64, prefix)
+      const base64 = dataUrl.split(',')[1]
+      setImageBase64(base64)
+      setImagePreviewUrl(dataUrl)
+    }
+    reader.readAsDataURL(file)
+    // reset input so same file can be re-selected
+    e.target.value = ''
+  }
+
+  const clearImage = () => {
+    setImageBase64(null)
+    setImagePreviewUrl(null)
+  }
 
   // Auto-scroll to bottom of chat
   useEffect(() => {
@@ -162,11 +186,15 @@ export function ChatPage() {
     initData()
   }, [user, cryptoKey, fetchTodayTasks, fetchAndDecrypt])
 
-  const handleCommand = async (text: string, source: 'text' | 'voice' = 'text') => {
-    if (!text.trim() || !user) return
+  const handleCommand = async (text: string, source: 'text' | 'voice' = 'text', imgBase64?: string) => {
+    if (!text.trim() && !imgBase64) return
+    if (!user) return
 
     setInput('')
-    addMessage('user', text)
+    clearImage()
+    // Show image inline in chat if sent
+    const displayText = text.trim() || '📷 Screenshot sent for Vault analysis'
+    addMessage('user', displayText, undefined, imagePreviewUrl || undefined)
     setTyping(true)
 
     try {
@@ -177,7 +205,7 @@ export function ChatPage() {
         memorySummary
       }
 
-      const result = await processChatIntent(text, context)
+      const result = await processChatIntent(text, context, imgBase64 || undefined)
       
       let pendingAction: Message['pendingAction'] | undefined = undefined
 
@@ -274,6 +302,28 @@ export function ChatPage() {
           username: result.params.username,
           category: result.params.category,
           notes: result.params.notes
+        }
+      } else if (result.intent === 'BATCH_VAULT_ENTRIES' && result.params?.entries?.length) {
+        // Auto-save all entries directly — no password needed for project info
+        if (user && cryptoKey) {
+          let savedCount = 0
+          for (const entry of result.params.entries) {
+            try {
+              await addEntry({
+                site: entry.site || 'Unknown',
+                username: entry.username || '',
+                password: entry.password || '',
+                category: entry.category || 'Other',
+                notes: entry.notes || ''
+              }, user.id, cryptoKey)
+              savedCount++
+            } catch (err) {
+              console.error('Batch vault entry failed:', entry, err)
+            }
+          }
+          addToast(`Saved ${savedCount} entries to Vault from screenshot! 📷`, 'success')
+        } else {
+          addToast('Vault key not available — please re-login.', 'error')
         }
       } else if (result.intent === 'VAULT_LOOKUP' && result.params?.site) {
         const query = result.params.site.toLowerCase()
@@ -428,6 +478,12 @@ export function ChatPage() {
                 {msg.content}
               </p>
 
+              {msg.imageUrl && (
+                <div className="mt-2 rounded overflow-hidden border border-outline-variant/30 max-w-sm">
+                  <img src={msg.imageUrl} alt="User attachment" className="w-full h-auto object-contain" />
+                </div>
+              )}
+
               {/* Interactive Action Widget */}
               {(() => {
                 const action = msg.pendingAction
@@ -472,17 +528,51 @@ export function ChatPage() {
 
       {/* Input Area */}
       <div className="p-4 bg-surface border-t border-outline-variant/30 relative z-20">
+        {/* Image Preview */}
+        {imagePreviewUrl && (
+          <div className="relative inline-block mb-2">
+            <img
+              src={imagePreviewUrl}
+              alt="Preview"
+              className="h-16 w-auto rounded border border-primary/40 object-cover"
+            />
+            <button
+              onClick={clearImage}
+              className="absolute -top-1.5 -right-1.5 bg-surface-highest border border-outline-variant rounded-full p-0.5 text-on-surface-variant hover:text-on-surface"
+            >
+              <X size={10} />
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-2 bg-surface-low border border-outline-variant/50 focus-within:border-primary transition-colors p-1 shadow-inner">
-          <button className="p-2 text-on-surface-variant hover:text-on-surface">
-            <Plus size={20} />
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleImageSelect}
+          />
+          {/* Image attach button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className={cn(
+              'p-2 transition-colors',
+              imageBase64
+                ? 'text-primary'
+                : 'text-on-surface-variant hover:text-on-surface'
+            )}
+            title="Attach screenshot"
+          >
+            <Paperclip size={18} />
           </button>
           <input 
             type="text"
             className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-2 placeholder:text-on-surface-variant/40 text-on-surface font-inter"
-            placeholder="Type command or speak..."
+            placeholder={imageBase64 ? 'Add a note or just send the image...' : 'Type command or speak...'}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCommand(input)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCommand(input, 'text', imageBase64 || undefined)}
           />
           <button 
             onClick={startVoiceInput}
@@ -491,8 +581,8 @@ export function ChatPage() {
             <Mic size={18} />
           </button>
           <button 
-            onClick={() => handleCommand(input)}
-            disabled={!input.trim()}
+            onClick={() => handleCommand(input, 'text', imageBase64 || undefined)}
+            disabled={!input.trim() && !imageBase64}
             className="p-2 bg-primary text-on-primary hover:bg-primary/80 transition-all disabled:opacity-50 disabled:bg-surface-highest"
           >
             <Send size={18} />

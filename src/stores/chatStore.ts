@@ -4,6 +4,7 @@ export interface Message {
   id: string
   role: 'mom' | 'user'
   content: string
+  imageUrl?: string
   timestamp: string
   status?: 'sending' | 'sent' | 'error'
   pendingAction?: {
@@ -23,7 +24,7 @@ export interface Message {
 interface ChatState {
   messages: Message[]
   isTyping: boolean
-  addMessage: (role: 'mom' | 'user', content: string, pendingAction?: Message['pendingAction']) => void
+  addMessage: (role: 'mom' | 'user', content: string, pendingAction?: Message['pendingAction'], imageUrl?: string) => void
   setTyping: (typing: boolean) => void
   removePendingAction: (messageId: string) => void
   clearChat: () => void
@@ -40,11 +41,12 @@ export const useChatStore = create<ChatState>((set) => ({
   ],
   isTyping: false,
 
-  addMessage: (role, content, pendingAction) => {
+  addMessage: (role, content, pendingAction, imageUrl) => {
     const newMessage: Message = {
       id: Math.random().toString(36).slice(2),
       role,
       content,
+      imageUrl,
       timestamp: new Date().toISOString(),
       status: 'sent',
       pendingAction,
