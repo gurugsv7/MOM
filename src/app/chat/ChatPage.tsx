@@ -380,7 +380,7 @@ export function ChatPage() {
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <Terminal size={18} className="text-[#a3a6ff]" />
-            <span className="text-sm font-black tracking-tighter uppercase">MOM Manager</span>
+            <span className="text-sm font-black tracking-tighter uppercase">MOM</span>
           </div>
           <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#6366f1]/10 border border-[#6366f1]/20 rounded-none">
             <span className="w-1.5 h-1.5 bg-[#a3a6ff] animate-pulse" />

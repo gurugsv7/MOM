@@ -69,7 +69,7 @@ function NewEntryModal({ onClose, onAdded }: { onClose: () => void; onAdded: () 
                 className="w-full bg-surface-highest text-on-surface placeholder-on-surface-variant/40 px-3 py-1.5 text-sm border-b border-outline-variant focus:border-primary transition-colors"
                 style={{ outline: 'none', borderRadius: 0 }}
                 placeholder={
-                  field === 'site' ? 'e.g. MOM Manager, Personal Site' : 
+                  field === 'site' ? 'e.g. MOM, Personal Site' : 
                   field === 'category' ? 'e.g. Vercel, GitHub, Netlify, Supabase' :
                   field === 'username' ? 'email or account name' :
                   field === 'url' ? 'https://...' : ''

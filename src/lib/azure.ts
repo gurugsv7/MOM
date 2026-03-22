@@ -147,13 +147,13 @@ export async function processChatIntent(userMessage: string, context: { todayTas
 
     RULES:
     - 'category' MUST be the platform/service name (e.g. 'Vercel', 'GitHub', 'Netlify', 'Supabase', 'AWS'). NEVER use 'MOM Project' or 'Personal' for hosting/dev tools.
-    - 'site' = the project name (e.g. 'MOM Manager', 'Portfolio Site')
+    - 'site' = the project name (e.g. 'MOM', 'Portfolio Site')
     - 'username' = the account name or email used on that platform (e.g. 'gurugsv7', 'user@gmail.com')
     - 'notes' = any relevant context (e.g. 'GitHub OAuth login, deployed via gurugsv7 account')
 
     EXAMPLES:
     - "MOM is deployed on Vercel using GitHub account gurugsv7"
-      → category: 'Vercel', site: 'MOM Manager', username: 'gurugsv7', notes: 'Deployed via GitHub OAuth'
+      → category: 'Vercel', site: 'MOM', username: 'gurugsv7', notes: 'Deployed via GitHub OAuth'
     - "My Netlify account is guru@email.com"
       → category: 'Netlify', site: 'General', username: 'guru@email.com'
     - "Supabase project key is xyz for portfolio"
