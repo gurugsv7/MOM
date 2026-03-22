@@ -41,10 +41,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const user = session?.user ?? null
     const hasBundle = typeof window !== 'undefined' && !!localStorage.getItem('mom_passcode_bundle')
     
-    // Update basic state
-    set({ session, user, isLoading: false, hasPasscode: hasBundle })
-    
-    if (user) {
+    if (!user) {
+      // Session lost or signed out: Purge all sensitive data
+      set({ 
+        session: null, 
+        user: null, 
+        profile: null, 
+        cryptoKey: null,
+        isPasscodeLocked: false,
+        isLoading: false, 
+        hasPasscode: hasBundle 
+      })
+      localStorage.removeItem('mom_vault_session')
+    } else {
+      // Valid session
+      set({ session, user, isLoading: false, hasPasscode: hasBundle })
       get().fetchProfile(user.id)
     }
   },
@@ -166,7 +177,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
 // Initialize session and secure state on load
 const init = async () => {
-  const { data: { session } } = await supabase.auth.getSession()
+  let session: Session | null = null
+  try {
+    const { data } = await supabase.auth.getSession()
+    session = data.session
+  } catch (e) {
+    console.warn('Session check failed:', e)
+  }
+
   const hasBundle = typeof window !== 'undefined' && !!localStorage.getItem('mom_passcode_bundle')
   const savedKey = typeof window !== 'undefined' ? localStorage.getItem('mom_vault_session') : null
   
