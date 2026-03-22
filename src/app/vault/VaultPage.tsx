@@ -10,7 +10,7 @@ function NewEntryModal({ onClose, onAdded }: { onClose: () => void; onAdded: () 
   const { user, cryptoKey } = useAuthStore()
   const { addEntry } = useVaultStore()
   const { addToast } = useUIStore()
-  const [form, setForm] = useState<VaultEntryPlaintext>({ site: '', username: '', password: '', url: '', notes: '' })
+  const [form, setForm] = useState<VaultEntryPlaintext>({ site: '', username: '', password: '', url: '', notes: '', category: 'Personal' })
   const [loading, setLoading] = useState(false)
   const [showPw, setShowPw] = useState(false)
 
@@ -42,14 +42,20 @@ function NewEntryModal({ onClose, onAdded }: { onClose: () => void; onAdded: () 
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {(['site', 'username', 'url', 'notes'] as const).map((field) => (
+          {['site', 'username', 'url', 'category', 'notes'].map((field) => (
             <div key={field}>
-              <label className="text-[9px] uppercase tracking-widest text-on-surface-variant">{field}</label>
+              <label className="text-[9px] uppercase tracking-widest text-on-surface-variant">
+                {field} {field === 'category' && '(Folder)'}
+              </label>
               <input
                 className="w-full bg-surface-highest text-on-surface placeholder-on-surface-variant/40 px-3 py-1.5 text-sm border-b border-outline-variant focus:border-primary transition-colors"
                 style={{ outline: 'none', borderRadius: 0 }}
-                placeholder={field === 'site' ? 'e.g. Netflix' : field === 'username' ? 'email or username' : ''}
-                value={form[field] || ''}
+                placeholder={
+                  field === 'site' ? 'e.g. Netflix' : 
+                  field === 'category' ? 'e.g. Work, MOM Project' : 
+                  field === 'username' ? 'email or username' : ''
+                }
+                value={(form as any)[field] || ''}
                 onChange={(e) => setForm({ ...form, [field]: e.target.value })}
                 required={field === 'site' || field === 'username'}
               />
@@ -188,40 +194,66 @@ export function VaultPage() {
           </div>
         ) : (
           <div className="space-y-2 animate-fade-in">
-            {filtered.map((entry) => {
-              const revealed = revealedIds.has(entry.id)
-              return (
-                <div key={entry.id} className="bg-surface-high px-4 py-4 border border-outline-variant/10">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Globe size={12} className="text-primary flex-shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-on-surface truncate">{entry.plaintext.site}</p>
-                        <p className="text-[10px] text-on-surface-variant/70 truncate">{entry.plaintext.username}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <ClipboardCopy text={entry.plaintext.username} label="Username" />
-                      <ClipboardCopy text={entry.plaintext.password} label="Password" />
-                      <button onClick={() => toggleReveal(entry.id)} className="text-primary hover:text-primary/80 btn-press">
-                        {revealed ? <EyeOff size={12} /> : <Eye size={12} />}
-                      </button>
-                      <button onClick={() => handleDelete(entry.id)} className="text-on-surface-variant hover:text-warning btn-press transition-colors">
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  </div>
-                  {revealed && (
-                    <div className="mt-3 bg-surface-highest px-3 py-2 border-l-2 border-primary animate-slide-up">
-                      <p className="text-xs font-mono text-primary select-all">{entry.plaintext.password}</p>
-                      {entry.plaintext.url && (
-                        <p className="text-[10px] text-on-surface-variant/50 mt-1 truncate">{entry.plaintext.url}</p>
-                      )}
-                    </div>
-                  )}
+            {/* Grouped view by category (Folder system) */}
+            {Object.entries(
+              filtered.reduce((acc, entry) => {
+                const cat = entry.plaintext.category || 'Personal'
+                acc[cat] = acc[cat] || []
+                acc[cat].push(entry)
+                return acc
+              }, {} as Record<string, typeof entries>)
+            ).map(([category, catEntries]) => (
+              <div key={category} className="mb-6">
+                <div className="flex items-center gap-2 mb-3 bg-[#1e1e24]/50 py-1.5 px-3 border-l-2 border-[#a3a6ff]">
+                  <Shield size={10} className="text-[#a3a6ff]" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#a3a6ff]">
+                    FOLDER: {category}
+                  </span>
                 </div>
-              )
-            })}
+                
+                <div className="space-y-2">
+                  {catEntries.map((entry) => {
+                    const revealed = revealedIds.has(entry.id)
+                    return (
+                      <div key={entry.id} className="bg-surface-high px-4 py-4 border border-outline-variant/10">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Globe size={12} className="text-primary flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-on-surface truncate">{entry.plaintext.site}</p>
+                              <p className="text-[10px] text-on-surface-variant/70 truncate">{entry.plaintext.username}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <ClipboardCopy text={entry.plaintext.username} label="Username" />
+                            <ClipboardCopy text={entry.plaintext.password} label="Password" />
+                            <button onClick={() => toggleReveal(entry.id)} className="text-primary hover:text-primary/80 btn-press">
+                              {revealed ? <EyeOff size={12} /> : <Eye size={12} />}
+                            </button>
+                            <button onClick={() => handleDelete(entry.id)} className="text-on-surface-variant hover:text-warning btn-press transition-colors">
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                        {revealed && (
+                          <div className="mt-3 bg-surface-highest px-3 py-2 border-l-2 border-primary animate-slide-up">
+                            <p className="text-xs font-mono text-primary select-all">{entry.plaintext.password}</p>
+                            {entry.plaintext.url && (
+                              <p className="text-[10px] text-on-surface-variant/50 mt-1 truncate">{entry.plaintext.url}</p>
+                            )}
+                            {entry.plaintext.notes && (
+                              <p className="text-[10px] text-[#f9f5fd]/60 mt-2 p-2 bg-black/20 italic">
+                                {entry.plaintext.notes}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

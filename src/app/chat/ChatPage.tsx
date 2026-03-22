@@ -15,11 +15,15 @@ import { supabase } from '@/lib/supabase'
 function VaultActionWidget({ 
   site, 
   username, 
+  category,
+  notes,
   onComplete 
 }: { 
   site: string; 
   username?: string; 
-  onComplete: (pass: string) => void 
+  category?: string;
+  notes?: string;
+  onComplete: (pass: string, category?: string, notes?: string) => void 
 }) {
   const [pass, setPass] = useState('')
   return (
@@ -35,10 +39,10 @@ function VaultActionWidget({
         placeholder="Input secret payload..."
       />
       <button 
-        onClick={() => onComplete(pass)}
+        onClick={() => onComplete(pass, category, notes)}
         className="w-full bg-[#6366f1] text-black text-[10px] font-black py-1.5 hover:bg-[#a3a6ff] transition-all"
       >
-        SAVE TO VAULT
+        SAVE TO {category ? category.toUpperCase() : 'VAULT'}
       </button>
     </div>
   )
@@ -252,6 +256,14 @@ export function ChatPage() {
             fetchTodayTasks(user.id)
           }
         }
+      } else if (result.intent === 'ADD_VAULT_ENTRY' && result.params?.site) {
+        pendingAction = {
+          type: 'ADD_VAULT_ENTRY',
+          site: result.params.site,
+          username: result.params.username,
+          category: result.params.category,
+          notes: result.params.notes
+        }
       } else if (result.intent === 'VAULT_LOOKUP' && result.params?.site) {
         const query = result.params.site.toLowerCase()
         const entry = entries.find(e => e.search_hint?.toLowerCase().includes(query))
@@ -305,15 +317,19 @@ export function ChatPage() {
     }
   }
 
-  const completeVaultAction = async (msgId: string, pass: string) => {
+  const completeVaultAction = async (msgId: string, pass: string, category?: string, notes?: string) => {
     const msg = useChatStore.getState().messages.find(m => m.id === msgId)
     if (!msg?.pendingAction || !user || !cryptoKey) return
 
+    const action = msg.pendingAction
+    const isAdd = action.type === 'ADD_VAULT_ENTRY'
+
     await addEntry({
-      site: msg.pendingAction.site,
-      username: msg.pendingAction.username || '',
+      site: action.site,
+      username: action.username || '',
       password: pass,
-      notes: 'Chat added'
+      category: category || (isAdd ? action.category : undefined) || 'Personal',
+      notes: notes || (isAdd ? action.notes : undefined) || 'Chat added'
     }, user.id, cryptoKey)
 
     addToast(`Mission Success: ${msg.pendingAction.site} credentials stored.`, 'success')
@@ -394,21 +410,31 @@ export function ChatPage() {
               </p>
 
               {/* Interactive Action Widget */}
-              {msg.pendingAction?.type === 'ADD_VAULT_ENTRY' && (
-                <VaultActionWidget 
-                  site={msg.pendingAction.site}
-                  username={msg.pendingAction.username}
-                  onComplete={(pass) => completeVaultAction(msg.id, pass)}
-                />
-              )}
-              {msg.pendingAction?.type === 'VAULT_LOOKUP' && (
-                <VaultLookupWidget 
-                  msgId={msg.id}
-                  site={msg.pendingAction.site}
-                  username={msg.pendingAction.username}
-                  password={msg.pendingAction.password}
-                />
-              )}
+              {(() => {
+                const action = msg.pendingAction
+                if (action?.type === 'ADD_VAULT_ENTRY') {
+                  return (
+                    <VaultActionWidget 
+                      site={action.site}
+                      username={action.username}
+                      category={action.category}
+                      notes={action.notes}
+                      onComplete={(pass, cat, n) => completeVaultAction(msg.id, pass, cat, n)}
+                    />
+                  )
+                }
+                if (action?.type === 'VAULT_LOOKUP') {
+                  return (
+                    <VaultLookupWidget 
+                      msgId={msg.id}
+                      site={action.site}
+                      username={action.username}
+                      password={action.password}
+                    />
+                  )
+                }
+                return null
+              })()}
             </div>
             <span className="text-[9px] uppercase tracking-tighter text-on-surface-variant mt-1 opacity-50">
               [{format(new Date(msg.timestamp), 'HH:mm:ss')}]

@@ -10,6 +10,8 @@ export interface Message {
     type: 'ADD_VAULT_ENTRY'
     site: string
     username?: string
+    category?: string
+    notes?: string
   } | {
     type: 'VAULT_LOOKUP'
     site: string

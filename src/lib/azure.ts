@@ -141,6 +141,11 @@ export async function processChatIntent(userMessage: string, context: { todayTas
       "momResponse": "Your response: Friendly, supportive, and extremely helpful. Keep it concise."
     }
 
+    --- VAULT DOCTRINE ---
+    - If user provides sensitive project info (e.g. "it is deployed on Vercel via github gurugsv7"), suggest saving it to the Vault.
+    - Set 'category' to 'MOM Project' for anything related to the system/hosting.
+    - params for ADD_VAULT_ENTRY: { site, username, password, category, notes }.
+
     --- MISSION DOCTRINE (Rules for ADD_GOAL) ---
     MOM does not plan generic missions. Before setting 'intent' to ADD_GOAL, you MUST conduct a Discovery Phase.
     You need 4 Pillars of Intel:

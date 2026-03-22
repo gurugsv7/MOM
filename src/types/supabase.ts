@@ -90,6 +90,7 @@ export interface VaultEntryPlaintext {
   password: string
   url?: string
   notes?: string
+  category?: string
 }
 
 export interface DecryptedVaultEntry {
