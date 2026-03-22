@@ -180,6 +180,18 @@ export function DashboardPage() {
                         <div className="flex items-center gap-1.5 mt-0.5 group/time">
                           <Clock className="w-3 h-3 text-primary/60" />
                           <span className="text-[10px] font-bold text-primary/80 uppercase">@{ (task as any).scheduled_time }</span>
+                          
+                          {/* Conflict Detector */}
+                          {sortedTodayTasks.some(other => 
+                            other.id !== task.id && 
+                            (other as any).scheduled_time === (task as any).scheduled_time && 
+                            (task as any).scheduled_time !== 'TBD'
+                          ) && (
+                            <span className="text-[8px] font-black bg-warning text-black px-1.5 py-0.5 rounded-sm animate-pulse ml-2">
+                              [CONFLICT]
+                            </span>
+                          )}
+
                           <button 
                             onClick={() => {
                               const newTime = window.prompt('RESCHEDULE: Enter new time (e.g. 05:00 PM)', (task as any).scheduled_time)
