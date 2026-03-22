@@ -224,6 +224,39 @@ function VaultLookupWidget({
   )
 }
 
+function NeuralMessage({ content, isMom }: { content: string; isMom: boolean }) {
+  if (!isMom) return <>{content}</>
+
+  // 1. Clean up any accidental or legacy markdown bolding **text**
+  const cleanContent = content.replace(/\*\*(.*?)\*\*/g, '$1')
+
+  // 2. Parse the custom ^highlight^ syntax
+  const parts = cleanContent.split(/(\^.*?\^)/g)
+
+  return (
+    <span className={cn(isMom && "font-inter font-medium")}>
+      {parts.map((part, index) => {
+        if (part.startsWith('^') && part.endsWith('^')) {
+          const text = part.slice(1, -1)
+          return (
+            <span 
+              key={index} 
+              className="inline-block px-1.5 py-0.5 rounded-sm bg-primary/10 text-primary font-black tracking-tight"
+              style={{ 
+                textShadow: '0 0 10px rgba(99, 102, 241, 0.3)',
+                letterSpacing: '-0.01em'
+              }}
+            >
+              {text}
+            </span>
+          )
+        }
+        return part
+      })}
+    </span>
+  )
+}
+
 export function ChatPage() {
   const { user, cryptoKey } = useAuthStore()
   const { todayTasks, fetchTodayTasks, skipTask } = useGoalsStore()
@@ -304,7 +337,8 @@ export function ChatPage() {
         memorySummary
       }
 
-      const result = await processChatIntent(text, context, imgBase64 || undefined)
+      const historyContext = messages.slice(-6).map(m => ({ role: m.role, content: m.content }))
+      const result = await processChatIntent(text, context, historyContext, imgBase64 || undefined)
       
       let pendingAction: Message['pendingAction'] | undefined = undefined
 
@@ -574,9 +608,7 @@ export function ChatPage() {
                   <ShieldCheck size={12} className="text-primary" />
                 </div>
               )}
-              <p className={cn(msg.role === 'mom' && "font-inter font-medium")}>
-                {msg.content}
-              </p>
+              <NeuralMessage content={msg.content} isMom={msg.role === 'mom'} />
 
               {msg.imageUrl && (
                 <div className="mt-2 rounded overflow-hidden border border-outline-variant/30 max-w-sm">

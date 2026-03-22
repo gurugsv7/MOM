@@ -39,27 +39,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setSession: async (session) => {
     const user = session?.user ?? null
-    set({ session, user, isLoading: false })
+    const hasBundle = typeof window !== 'undefined' && !!localStorage.getItem('mom_passcode_bundle')
+    
+    // Update basic state
+    set({ session, user, isLoading: false, hasPasscode: hasBundle })
+    
     if (user) {
       get().fetchProfile(user.id)
-      // Since we don't persist cryptoKey, if it's missing after a refresh, 
-      // the VaultPage will prompt for it once.
     }
   },
 
   setCryptoKey: async (key) => {
     set({ cryptoKey: key })
     if (key) {
-      // Persist key to sessionStorage so it survives refreshes (but not tab closure)
       try {
+        // Ensure extractable is true for persistence
         const exported = await window.crypto.subtle.exportKey('raw', key)
         const b64 = btoa(String.fromCharCode(...new Uint8Array(exported)))
-        sessionStorage.setItem('mom_vault_session', b64)
+        localStorage.setItem('mom_vault_session', b64)
       } catch (e) {
-        console.warn('Could not save vault session:', e)
+        console.warn('Vault key not extractable (Legacy Session). Please refresh or re-login for permanent access.', e)
       }
     } else {
-      sessionStorage.removeItem('mom_vault_session')
+      localStorage.removeItem('mom_vault_session')
     }
   },
 
@@ -69,7 +71,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       const { deriveKey, encryptRaw } = await import('@/lib/crypto')
-      const pinKey = await deriveKey(pin, user.id + '_pin') // Unique salt for PIN
+      // Note: we derive a key that is extractable so it can re-encrypt the vault key if needed
+      const pinKey = await deriveKey(pin, user.id + '_pin')
       const rawVaultKey = await window.crypto.subtle.exportKey('raw', cryptoKey)
       const bundle = await encryptRaw(rawVaultKey, pinKey)
       
@@ -93,7 +96,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const decryptedRaw = await decryptRaw(bundle.blob, bundle.iv, pinKey)
       
       const vaultKey = await window.crypto.subtle.importKey(
-        'raw', decryptedRaw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']
+        'raw', decryptedRaw, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']
       )
       
       await get().setCryptoKey(vaultKey)
@@ -131,9 +134,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
 
-    // Derive vault key from account password immediately on login
+    // deriveKey now returns extractable: true from crypto.ts
     const key = await deriveKey(password, data.user.id)
-    set({ session: data.session, user: data.user, cryptoKey: key, isLoading: false })
+    await get().setCryptoKey(key)
+    set({ session: data.session, user: data.user, isLoading: false })
     await get().fetchProfile(data.user.id)
   },
 
@@ -145,47 +149,59 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (data.session) {
       await supabase.from('profiles').update({ display_name: displayName } as any).eq('id', data.user.id)
       const key = await deriveKey(password, data.user.id)
-      set({ session: data.session, user: data.user, cryptoKey: key, isLoading: false })
+      await get().setCryptoKey(key)
+      set({ session: data.session, user: data.user, isLoading: false })
       await get().fetchProfile(data.user.id)
     } else {
-      throw new Error('Signup successful, but session not created. Ensure "Confirm Email" is OFF in Supabase Auth settings.')
+      throw new Error('Signup success, but no session.')
     }
   },
 
   logout: async () => {
     await supabase.auth.signOut()
-    set({ session: null, user: null, profile: null, cryptoKey: null })
+    localStorage.removeItem('mom_vault_session')
+    set({ session: null, user: null, profile: null, cryptoKey: null, isPasscodeLocked: false })
   },
 }))
 
-// Initialize session from Supabase on load
-// Initialize session from Supabase on load
-supabase.auth.getSession().then(async ({ data: { session } }: { data: { session: Session | null } }) => {
-  const store = useAuthStore.getState()
-  
-  // Set initial PIN state
+// Initialize session and secure state on load
+const init = async () => {
+  const { data: { session } } = await supabase.auth.getSession()
   const hasBundle = typeof window !== 'undefined' && !!localStorage.getItem('mom_passcode_bundle')
-  if (hasBundle) {
-    useAuthStore.setState({ isPasscodeLocked: true, hasPasscode: true })
-  }
-
-  // Try to restore vault key from sessionStorage (survives refreshes)
-  const savedKey = typeof window !== 'undefined' ? sessionStorage.getItem('mom_vault_session') : null
-  if (savedKey && session?.user && !store.cryptoKey) {
+  const savedKey = typeof window !== 'undefined' ? localStorage.getItem('mom_vault_session') : null
+  
+  let restored = false
+  
+  if (savedKey && session?.user) {
     try {
       const raw = Uint8Array.from(atob(savedKey), c => c.charCodeAt(0))
       const key = await window.crypto.subtle.importKey(
-        'raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']
+        'raw', raw, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']
       )
-      useAuthStore.setState({ cryptoKey: key })
+      useAuthStore.setState({ cryptoKey: key, isPasscodeLocked: false })
+      restored = true
     } catch (e) {
-      console.warn('Could not restore vault session:', e)
+      console.warn('Token recovery failed, clearing stale session.')
+      localStorage.removeItem('mom_vault_session')
     }
   }
 
-  await store.setSession(session)
-})
+  // Final synchronization of loading and lock states
+  useAuthStore.setState({ 
+    session, 
+    user: session?.user ?? null,
+    isLoading: false, 
+    hasPasscode: hasBundle,
+    isPasscodeLocked: hasBundle && !restored 
+  })
 
-supabase.auth.onAuthStateChange((_event: any, session: Session | null) => {
-  useAuthStore.getState().setSession(session)
-})
+  // Auth changes
+  supabase.auth.onAuthStateChange(async (_event: string, session: Session | null) => {
+    await useAuthStore.getState().setSession(session)
+  })
+}
+
+// Global initialization trigger
+if (typeof window !== 'undefined') {
+  init()
+}

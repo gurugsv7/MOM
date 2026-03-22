@@ -110,51 +110,7 @@ function NewEntryModal({ onClose, onAdded }: { onClose: () => void; onAdded: () 
   )
 }
 
-function SetKeyModal({ onSet }: { onSet: (pass: string) => void }) {
-  const [pass, setPass] = useState('')
-  const { addToast } = useUIStore()
-
-  const handleSet = () => {
-    if (pass.length < 4) {
-      addToast('Vault key must be at least 4 characters.', 'error')
-      return
-    }
-    onSet(pass)
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md px-6">
-      <div className="w-full max-w-sm bg-surface border border-outline-variant p-8 shadow-2xl space-y-6">
-        <div className="text-center space-y-2">
-          <Shield size={32} className="mx-auto text-primary" />
-          <h2 className="text-lg font-black uppercase tracking-[0.2em] text-on-surface">Vault Locked</h2>
-          <p className="text-xs text-on-surface-variant leading-relaxed">
-            Enter your login password to unlock your secure credentials. Your encrypted data is safe in the cloud; this password only unlocks it locally.
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          <input
-            type="password"
-            autoFocus
-            className="w-full bg-surface-highest text-on-surface px-4 py-3 text-sm border-b-2 border-primary outline-none transition-all focus:bg-surface-high"
-            placeholder="Enter Vault Key..."
-            value={pass}
-            onKeyDown={(e) => e.key === 'Enter' && handleSet()}
-            onChange={(e) => setPass(e.target.value)}
-          />
-
-          <button
-            onClick={handleSet}
-            className="w-full py-4 bg-primary text-black text-[11px] font-black uppercase tracking-widest hover:brightness-110 btn-press"
-          >
-            UNLOCK VAULT
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
+// SetKeyModal removed in favor of Inline Decryption
 
 function ClipboardCopy({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false)
@@ -193,25 +149,13 @@ export function VaultPage() {
 
   useEffect(() => { loadVault() }, [loadVault])
 
-  const handleSetKey = async (pass: string) => {
-    if (!user) return
-    const { deriveKey } = await import('@/lib/crypto')
-    const newKey = await deriveKey(pass, user.id)
-    
-    // If we already had a key and entries, we need to re-encrypt them (Rotation)
-    if (cryptoKey && entries.length > 0) {
-      try {
-        await rotateKey(user.id, cryptoKey, newKey)
-        addToast('Vault key updated and data re-encrypted.', 'success')
-      } catch (e) {
-        addToast('Failed to re-encrypt vault. Please ensure current key is valid.', 'error')
-        return
-      }
+  // Automatically trigger the password prompt if we're on this page and key is missing
+  useEffect(() => {
+    if (!cryptoKey && !isLoading) {
+      setShowKeyReset(true)
     }
-    
-    setCryptoKey(newKey)
-    setShowKeyReset(false)
-  }
+  }, [cryptoKey, isLoading])
+
 
   const toggleReveal = (id: string) => {
     setRevealedIds((prev) => {
@@ -282,10 +226,10 @@ export function VaultPage() {
               </div>
             </div>
             <button 
-              onClick={() => setShowKeyReset(true)}
-              className="text-[9px] font-bold text-on-surface-variant hover:text-primary transition-colors"
+              onClick={() => setCryptoKey(null)}
+              className="text-[9px] font-bold text-on-surface-variant hover:text-warning transition-colors"
             >
-              CHANGE KEY
+              LOCK VAULT
             </button>
           </div>
         )}
@@ -299,18 +243,44 @@ export function VaultPage() {
             {[1, 2, 3].map(i => <div key={i} className="h-20 bg-surface-high animate-pulse" />)}
           </div>
         ) : !cryptoKey ? (
-          <div className="text-center py-16">
-            <Lock size={36} className="mx-auto text-primary mb-4" />
-            <h3 className="text-lg font-bold text-on-surface mb-2">Vault is Locked</h3>
-            <p className="text-on-surface-variant text-sm mb-6 max-w-[200px] mx-auto leading-relaxed">
-              Your vault is <span className="text-primary font-bold">Safe in the Cloud</span> but locked for this local session.
-            </p>
-            <button
-              onClick={() => setShowKeyReset(true)}
-              className="px-6 py-2 bg-primary text-black text-[10px] font-black uppercase tracking-widest"
-            >
-              Enter Key
-            </button>
+          <div className="text-center py-20 px-6 max-w-sm mx-auto animate-fade-in">
+            <div className="relative mb-8">
+              <Shield size={40} className="mx-auto text-primary/20" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-12 h-12 border-2 border-primary/10 border-t-primary rounded-full animate-spin" />
+              </div>
+            </div>
+            
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <h3 className="text-xs font-black uppercase tracking-[0.3em] text-[#f9f5fd]">Vault Syncing</h3>
+                <p className="text-[10px] text-on-surface-variant/60 font-medium">Verify login password to proceed</p>
+              </div>
+
+              <input
+                type="password"
+                autoFocus
+                className="w-full bg-transparent border-b border-outline-variant/30 px-2 py-3 text-center text-sm focus:border-primary outline-none transition-all placeholder:text-on-surface-variant/20 tracking-widest"
+                placeholder="········"
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter') {
+                    const pass = (e.target as HTMLInputElement).value
+                    if (pass && user) {
+                      const { deriveKey } = await import('@/lib/crypto')
+                      const key = await deriveKey(pass, user.id)
+                      const exported = await window.crypto.subtle.exportKey('raw', key)
+                      const b64 = btoa(String.fromCharCode(...new Uint8Array(exported)))
+                      localStorage.setItem('mom_vault_session', b64)
+                      setCryptoKey(key)
+                    }
+                  }
+                }}
+              />
+              
+              <p className="text-[8px] text-on-surface-variant uppercase tracking-widest opacity-30">
+                Press Enter to Authorize Device
+              </p>
+            </div>
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16">
@@ -415,7 +385,6 @@ export function VaultPage() {
       </div>
 
       {showNewEntry && <NewEntryModal onClose={() => setShowNewEntry(false)} onAdded={loadVault} />}
-      {(showKeyReset || (user && !cryptoKey)) && <SetKeyModal onSet={handleSetKey} />}
     </div>
   )
 }

@@ -161,19 +161,26 @@ Rewrite each task title and description to flow naturally with the day's other t
 export async function processChatIntent(
   userMessage: string,
   context: { todayTasks: any[], vaultSites: string[], activeGoals: { id: string, title: string }[], memorySummary: string },
+  history: Array<{ role: string, content: string }> = [],
   imageBase64?: string
 ) {
+  // Extract recent context from history to prevent repeats
+  const recentDialogue = history.slice(-6).map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n')
+
   const prompt = `
     Analyze user input for the MOM (My Own Manager) Tactical OS.
     
     Operator Terminal Memory:
     ${context.memorySummary || "FIRST INITIALIZATION. NO PRIOR DATA."}
 
+    Recent Conversation History:
+    ${recentDialogue || "NO RECENT HISTORY."}
+
     Active Missions (Goals): ${JSON.stringify(context.activeGoals)}
     Today's Tasks: ${JSON.stringify(context.todayTasks.map(t => ({ id: t.id, title: t.title, goalId: t.goal_day_id })))}
     Vault Sites: ${JSON.stringify(context.vaultSites)}
     
-    User Message: "${userMessage}"
+    Current User Message: "${userMessage}"
     
     Return ONLY a raw JSON object (no markdown):
     {
@@ -183,77 +190,51 @@ export async function processChatIntent(
     }
 
     --- VAULT DOCTRINE ---
-    The vault is organized by Platform Folders. Each platform (e.g. Vercel, GitHub, Netlify, Supabase) is a folder.
-    Inside each folder, entries store: Project Name → site, Account Name → username, optional password, notes for context.
-
-    RULES:
-    - 'category' MUST be the platform/service name (e.g. 'Vercel', 'GitHub', 'Netlify', 'Supabase', 'AWS'). NEVER use 'MOM Project' or 'Personal' for hosting/dev tools.
-    - 'site' = the project name (e.g. 'MOM', 'Portfolio Site')
-    - 'username' = the account name or email used on that platform (e.g. 'gurugsv7', 'user@gmail.com')
-    - 'notes' = any relevant context (e.g. 'GitHub OAuth login, deployed via gurugsv7 account')
-
-    EXAMPLES:
-    - "MOM is deployed on Vercel using GitHub account gurugsv7"
-      → category: 'Vercel', site: 'MOM', username: 'gurugsv7', notes: 'Deployed via GitHub OAuth'
-    - "My Netlify account is guru@email.com"
-      → category: 'Netlify', site: 'General', username: 'guru@email.com'
-    - "Supabase project key is xyz for portfolio"
-      → category: 'Supabase', site: 'Portfolio', username: 'guru@email.com', password: 'xyz'
+    - The vault is organized by Platform Folders (e.g. Vercel, GitHub, Netlify, Supabase).
+    - Rule: NEVER assume a username or account (e.g. 'Shomesh007' or email) if not explicitly stated in the message or visible in the image.
+    - Rule: If you identified a project name (site) in a previous message, DO NOT ask for it again. Use the Recent Conversation History.
+    - Rule: 'category' MUST be the platform/service name.
+    - Rule: 'username' = the actual account name or email. If unsure, ask.
 
     --- IMAGE ANALYSIS DOCTRINE ---
-    When user sends a screenshot or image:
-    - Carefully read ALL visible text in the image.
-    - Identify platform context (GitHub repos, Vercel projects, Netlify sites, Supabase dashboards, etc.)
-    - **FIDELITY CHECK**: If a project name, account name (username), or platform (category) is not 100% clear from the image, DO NOT save it automatically. 
-    - **CLARIFICATION RULE**: If items are ambiguous (e.g., "Is this GitHub or Vercel?" or "Which account do these belong to?"), set intent to "CHAT" or "DISAMBIGUATE" and ask the user for that specific missing info.
-    - If the image shows MULTIPLE projects/repos and ALL fields are clear: use intent "BATCH_VAULT_ENTRIES".
-      params = { entries: [ { site, username, category, notes, password }, ... ] }
-      Each project/repo gets its own entry. Example from a GitHub repos screenshot:
-        entries: [
-          { category: 'GitHub', site: 'lykarealty', username: 'Shomesh007', notes: 'GitHub repo' },
-          { category: 'GitHub', site: 'zuaera', username: 'Shomesh007', notes: 'GitHub repo' },
-        ]
-      From a Vercel projects screenshot:
-        entries: [
-          { category: 'Vercel', site: 'hintio', username: 'Shomesh007', notes: 'hintio.vercel.app — linked to Shomesh007/hintio' },
-          { category: 'Vercel', site: 'brinqo', username: 'Shomesh007', notes: 'brinqo-delta.vercel.app — linked to Shomesh007/brinqo' },
-        ]
-    - If the image shows a SINGLE project, use "ADD_VAULT_ENTRY" as usual.
-    - momResponse should summarize what was extracted, and if anything was skipped for being unclear, explain why and ask for it.
-
-    - params for ADD_VAULT_ENTRY: { site, username, password, category, notes }.
+    When user sends an image:
+    - Carefully read ALL visible text.
+    - **FIDELITY CHECK**: If a project name, account name (username), or platform is not 100% clear, DO NOT save it.
+    - **AMBIGUITY GATE**: If you see a project but not the account, or vice versa, set intent to "CHAT" or "DISAMBIGUATE" and ask: "I've identified the project [Name], but which account (email/username) should I store this under?"
+    - **MOM RESPONSE**: Summarize what was found. If skipping something due to ambiguity, explain exactly what is missing.
 
     --- MISSION DOCTRINE (Rules for ADD_GOAL) ---
     MOM does not plan generic missions. Before setting 'intent' to ADD_GOAL, you MUST conduct a Discovery Phase.
     You need 4 Pillars of Intel:
     1. OBJECTIVE & MOTIVATION: What is the end-state? Why does the operator want this?
-    2. CONSTRAINTS: Any physical limits, equipment availability (e.g., gym access?), or specific dietary/lifestyle roadblocks?
+    2. CONSTRAINTS: Any physical limits, equipment availability (e.g. gym?), or specific roadblocks?
     3. EXPERIENCE LEVEL: Is the operator a novice or expert in this domain?
     4. TEMPORAL PARAMETERS: A clear deadline (YYYY-MM-DD) and a realistic daily time budget (mins).
 
     CRITICAL RULES:
-    - If any Pilllar is missing or vague (e.g., "workout for 2 months"), DO NOT return ADD_GOAL.
+    - If any Pilllar is missing or vague, DO NOT return ADD_GOAL.
     - Instead, use intent: "CHAT" and ask 1 or 2 targeted questions to fill the gaps.
-    - Be proactive. Instead of just "What equipment?", say "Got the schedule. Do you have a full gym, or are we planning for bodyweight/home exercises? Also, what's your current fitness level?"
-    - ONLY trigger ADD_GOAL when you have enough high-fidelity context to build a custom, non-generic roadmap.
+    - ONLY trigger ADD_GOAL when you have enough high-fidelity context.
     - params for ADD_GOAL: { title, category, description, deadline, totalDays, dailyBudgetMins }.
-    - description should summarize all gathered Pillars (motivation, level, equipment, etc).
 
     --- OTHER INTENTS ---
     - [ADD TASK] If user explicitly asks to schedule a daily task.
     - [SECURITY] Never ask for passwords. Use the secure widget for vault entries.
     - [VAULT STORE] If user says "store my password" or similar, use ADD_VAULT_ENTRY with site/username.
     - [VAULT LOOKUP] If user asks for an existing password, set intent to VAULT_LOOKUP and provide the 'site' in params.
-    - [UX TONE] Friendly Personal Manager. Be supportive and warm. avoid heavy military or tactical jargon. No excessive use of bold (**). Be brief but clear.
+    - [UX TONE] Friendly Personal Manager. Be supportive and warm. avoid heavy military or tactical jargon.
+    - **CRITICAL**: NEVER use asterisks (**) for bolding. It looks awkward in the terminal.
+    - **HIGHLIGHTS**: To emphasize a word or phrase, wrap it in carets like ^this^. MOM will render these as premium colored highlights.
+    - **LISTS**: Use capitalized headers and clean bullet points.
   `
 
   const userContent = userMessage || (imageBase64 ? 'Analyze this screenshot and extract all visible project/account information for the vault.' : '')
-  const content = await azureChat([
-    { role: 'system', content: 'You are MOM, a friendly and helpful personal manager assistant.' },
+  const result = await azureChat([
+    { role: 'system', content: 'You are MOM, a friendly and helpful personal manager assistant. You have access to recent history to prevent asking redundant questions.' },
     { role: 'user', content: prompt + `\n\nUser Message: "${userContent}"` }
   ], true, imageBase64)
 
-  return JSON.parse(content)
+  return JSON.parse(result)
 }
 
 export async function generateMemoryUpdate(oldSummary: string, interaction: string) {

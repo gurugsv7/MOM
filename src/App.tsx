@@ -4,7 +4,7 @@ import { AppLayout } from '@/components/AppLayout'
 import { SecurityGate } from '@/components/auth/SecurityGate'
 
 export function App() {
-  const { session, isLoading } = useAuthStore()
+  const { session, isLoading, hasPasscode } = useAuthStore()
 
   if (isLoading) {
     return (
@@ -31,11 +31,12 @@ export function App() {
     )
   }
 
-  return session ? (
-    <SecurityGate>
-      <AppLayout />
-    </SecurityGate>
-  ) : (
-    <AuthPage />
-  )
+  if (!session) return <AuthPage />
+
+  // Mandatory PIN Onboarding for new users or users without a PIN
+  if (!hasPasscode) {
+    return <AuthPage forcePasscode />
+  }
+
+  return <AppLayout />
 }

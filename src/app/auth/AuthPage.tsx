@@ -6,14 +6,14 @@ import { Eye, EyeOff, Lock, Shield } from 'lucide-react'
 
 type Mode = 'login' | 'signup'
 
-export function AuthPage() {
+export function AuthPage({ forcePasscode = false }: { forcePasscode?: boolean }) {
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [isSettingPasscode, setIsSettingPasscode] = useState(false)
+  const [isSettingPasscode, setIsSettingPasscode] = useState(forcePasscode)
   const [pin, setPin] = useState('')
   const { login, signup, setPasscode } = useAuthStore()
   const { addToast } = useUIStore()
