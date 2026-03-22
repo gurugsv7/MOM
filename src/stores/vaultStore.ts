@@ -61,7 +61,7 @@ export const useVaultStore = create<VaultState>((set) => ({
         user_id: userId,
         encrypted_blob: blob,
         iv,
-        search_hint: plaintext.site,
+        search_hint: `${plaintext.site} [${plaintext.category || 'Personal'}]`,
       })
       .select()
       .single()
