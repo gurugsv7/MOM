@@ -201,22 +201,15 @@ export async function processChatIntent(
   imageBase64?: string
 ) {
   // Extract recent context from history to prevent repeats
-  const recentDialogue = history.slice(-20).map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n')
+  // Only need the last few turns for snappier intent parsing
+  const recentDialogue = history.slice(-8).map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n')
 
   const prompt = `
-    Analyze user input for the MOM (My Own Manager) Tactical OS.
-    
-    Operator Terminal Memory:
-    ${context.memorySummary || "FIRST INITIALIZATION. NO PRIOR DATA."}
-
-    System Clock: ${new Date().toISOString().split('T')[0]} (Use this for date relative calculations)
-
-    Recent Conversation History:
-    ${recentDialogue || "NO RECENT HISTORY."}
-
-    Active Missions (Goals): ${JSON.stringify(context.activeGoals)}
-    Today's Tasks: ${JSON.stringify(context.todayTasks.map(t => ({ id: t.id, title: t.title, goalId: t.goal_day_id })))}
-    Vault Sites: ${JSON.stringify(context.vaultSites)}
+    Memory: ${context.memorySummary || "NONE"}
+    Now: ${new Date().toISOString().split('T')[0]}
+    History: ${recentDialogue || "NONE"}
+    Missions: ${JSON.stringify(context.activeGoals.map(g => g.title))}
+    Vault: ${JSON.stringify(context.vaultSites.slice(0, 10))}
     
     Current User Message: "${userMessage}"
     
@@ -242,14 +235,14 @@ export async function processChatIntent(
     - **MOM RESPONSE**: Summarize what was found. If skipping something due to ambiguity, explain exactly what is missing.
 
     --- MISSION DOCTRINE (Rules for Goal Discovery) ---
-    MOM is an intuitive strategist, not a form-filler. Your goal is to launch a Mission as fast as possible (2-4 turns).
+    MOM is an intuitive strategist. Your goal is to launch a Mission in 2-4 turns by balancing curiosity with speed.
     
     INTUITIVE CONTEXT GATHERING:
-    - Rule: DO NOT follow a rigid template or checklist (e.g. don't always ask for budget, deadline, and exp level in order).
-    - Rule: Only ask for details that are CRITICAL to that specific goal. For a diet, "daily time budget" is often irrelevant—skip it.
-    - Rule: Acknowledge the user's input, then either (A) ask at most ONE highly relevant follow-up, or (B) make a logical assumption and LAUNCH the mission.
-    - **SMART ASSUMPTIONS**: If a detail is missing (e.g. daily minutes, experience level), assume a reasonable default (e.g. 60 mins, intermediate) and tell the user: "I'll assume [Assumption] unless you say otherwise."
-    - **GEOGRAPHIC INTEL**: For Fitness/Diet, ask where they are based ONLY if it's actually helpful for suggestions.
+    - Rule: NEVER assume high-impact personal context (e.g. dont guess a 3-month timeline or assume no dietary restrictions). ASK for these.
+    - Rule: ALWAYS ask for "Core Intent" (e.g. Which specific diet? Any food allergies or restrictions? What is your target deadline?).
+    - Rule: DO assume "Secondary Logistical" details to keep things fast (e.g. assume 45-60 mins/day, intermediate level, or standard tools) and inform the user: "I'll assume [Assumption] to get us moving unless you prefer otherwise."
+    - Rule: For Diet/Fitness, GEOGRAPHIC context is good (e.g. "I'll assume an Indian food context based on your location...") but personal health details are MUST-ASK.
+    - Rule: Aim for EXACTLY ONE highly relevant question per turn. 
 
     LAUNCH CRITERIA for ADD_GOAL:
     - You only need a clear Title, a general idea of the objective, and a rough deadline/timeframe.
@@ -263,12 +256,10 @@ export async function processChatIntent(
     - [SECURITY] Never ask for passwords. Use the secure widget for vault entries.
     - [VAULT STORE] If user says "store my password" or similar, use ADD_VAULT_ENTRY with site/username.
     - [VAULT LOOKUP] If user asks for an existing password, set intent to VAULT_LOOKUP and provide the 'site' in params.
-    - [UX TONE] Ultra-Concise Manager. 
-    - **BRIEF**: Keep responses under 50 words. Avoid repeat-back summaries.
-    - **STRUCTURING**: Use bullet points (•) only when necessary. Double newlines only to separate sections.
-    - **CRITICAL**: No scrolls. If text goes beyond 5 lines, delete 50% of the filler.
-    - **CRITICAL**: NEVER use asterisks (**) for bolding. 
-    - **HIGHLIGHTS**: Wrap important keywords in carets like ^this^. 
+    --- UX PROTOCOL ---
+    - Rule: RESPONSE MUST BE BLAZING FAST.
+    - Rule: NO filler. NO "I understand". Just act or ask.
+    - Rule: Keep under 30 words. NO asterisks (**). Carets ^highlight^ only.
   `
 
   const userContent = userMessage || (imageBase64 ? 'Analyze this screenshot and extract all visible project/account information for the vault.' : '')
