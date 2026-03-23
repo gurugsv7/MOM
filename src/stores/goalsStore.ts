@@ -251,7 +251,8 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
                 estimated_minutes: t.estimated_minutes,
                 scheduled_time: t.scheduled_time || 'TBD',
                 status: 'pending', redistributed: true,
-                original_day_number: day.day_number, display_order: idx
+                original_day_number: day.day_number, display_order: idx,
+                requirements: t.requirements || []
               })))
             }
             await supabase.rpc('increment_momentum', { goal_id: day.goal_id, amount: -15 })

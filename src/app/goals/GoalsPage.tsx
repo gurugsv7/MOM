@@ -127,8 +127,15 @@ function NewGoalModal({ onClose, onCreated, initialGoal, goals, preSelectedTempl
             goal_day_id: gDay.id, user_id: user.id,
             title: t.title, description: t.description,
             estimated_minutes: t.estimated_minutes,
+            scheduled_time: t.scheduled_time || 'TBD',
             status: 'pending', redistributed: false,
             original_day_number: null, display_order: i,
+            objective: t.objective,
+            steps: t.steps || [],
+            success_criteria: t.success_criteria,
+            common_mistakes: t.common_mistakes,
+            requirements: t.requirements || [],
+            resources: t.resources || []
           }))
         )
       }
@@ -312,7 +319,7 @@ function NewGoalModal({ onClose, onCreated, initialGoal, goals, preSelectedTempl
 export function GoalsPage() {
   const { user } = useAuthStore()
   const { goals, fetchGoals, isLoading } = useGoalsStore()
-  const { addToast } = useUIStore()
+  const { addToast, setSelectedTask } = useUIStore()
   const [showNewGoal, setShowNewGoal] = useState(false)
   const [editingGoal, setEditingGoal] = useState<any | null>(null)
   const [expandedGoal, setExpandedGoal] = useState<string | null>(null)
@@ -525,7 +532,11 @@ export function GoalsPage() {
                                 </div>
                                 <div className="space-y-1.5">
                                   {day.tasks?.map((task: any) => (
-                                    <div key={task.id} className="bg-surface-highest p-3 border border-outline-variant/5">
+                                    <div 
+                                      key={task.id} 
+                                      onClick={() => setSelectedTask(task.id)}
+                                      className="bg-surface-highest p-3 border border-outline-variant/5 cursor-pointer hover:border-primary/30 transition-all active:scale-[0.98]"
+                                    >
                                       <div className="flex items-center justify-between mb-1">
                                         <p className={cn("text-xs font-bold transition-all", task.status === 'done' ? "text-on-surface-variant line-through" : "text-on-surface")}>
                                           {task.title}

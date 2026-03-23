@@ -45,19 +45,25 @@ export interface Database {
           id: string; goal_day_id: string; user_id: string; title: string
           description: string | null; estimated_minutes: number; status: string
           redistributed: boolean; original_day_number: number | null
-          display_order: number; created_at: string
+          display_order: number; created_at: string; scheduled_time: string | null
+          objective: string | null; steps: Json; success_criteria: string | null
+          common_mistakes: string | null; resources: Json; requirements: Json
         }
         Insert: {
           id?: string; goal_day_id: string; user_id: string; title: string
           description?: string | null; estimated_minutes?: number; status?: string
           redistributed?: boolean; original_day_number?: number | null
-          display_order?: number; created_at?: string
+          display_order?: number; created_at?: string; scheduled_time?: string | null
+          objective?: string | null; steps?: Json; success_criteria?: string | null
+          common_mistakes?: string | null; resources?: Json
         }
         Update: {
           id?: string; goal_day_id?: string; user_id?: string; title?: string
           description?: string | null; estimated_minutes?: number; status?: string
           redistributed?: boolean; original_day_number?: number | null
-          display_order?: number; created_at?: string
+          display_order?: number; created_at?: string; scheduled_time?: string | null
+          objective?: string | null; steps?: Json; success_criteria?: string | null
+          common_mistakes?: string | null; resources?: Json
         }
       }
       vault_entries: {

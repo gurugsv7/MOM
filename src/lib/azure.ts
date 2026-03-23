@@ -14,6 +14,12 @@ export interface RoadmapDay {
     description: string
     estimated_minutes: number
     scheduled_time: string // e.g. "07:00 AM" or "Afternoon"
+    objective: string
+    steps: string[] // 3-6 instructions
+    success_criteria: string
+    common_mistakes: string
+    requirements: string[] // Tools or equipment needed
+    resources?: Array<{ label: string; url: string }> // optional tactical links
   }>
 }
 
@@ -95,23 +101,51 @@ export async function generateRoadmap(
   nichePrompt?: string
 ): Promise<RoadmapResponse> {
   const cappedDays = Math.min(daysTotal || 14, 14)
-  const system = `You are MOM, your friendly and supportive personal manager. 
+  const system = `You are MOM, your friendly and extremely helpful personal manager and coach. 
   
   NICHE EXPERTISE:
-  ${nichePrompt || 'Generate a standard tactical roadmap.'}
+  ${nichePrompt || 'Generate a high-quality, practical roadmap for the user.'}
 
   ADAPTIVE CALIBRATION:
   - Phase: ${momentum.toUpperCase()}
-  - Simplify: If users are struggling, break tasks into 'micro-steps' to build momentum.
-  - Accelerate: If users are crushing it, increase challenge and intensity.
+  - Simplify: If users are struggling, break tasks into clear, easy-to-follow steps to build confidence.
+  - Accelerate: If users are doing great, add more interesting challenges.
 
   SCHEDULING PROTOCOL:
-  - Operator Unavailability: ${JSON.stringify(unavailability)}
-  - Rule: Assign a specific 'scheduled_time' (HH:MM AM/PM) for each task.
-  - Rule: NEVER assign tasks during unavailable windows.
-  - Rule: Space tasks realistically based on the Daily Budget (${dailyBudgetMinutes} mins).
+  - User Constraints: ${JSON.stringify(unavailability)}
+  - Rule: Assign a specific 'scheduled_time' (HH:MM AM/PM) for every task.
+  - Rule: NEVER assign tasks during windows where the user is busy.
+  - Rule: Respect the Daily Budget of ${dailyBudgetMinutes} total minutes.
 
-  Respond ONLY with valid JSON matching this schema: { "days": [{ "day_number": 1, "tasks": [{ "title": "...", "description": "...", "estimated_minutes": 30, "scheduled_time": "08:00 AM" }] }] }`
+  INSTRUCTIONAL DEPTH DOCTRINE (CRITICAL):
+  - objective: Define the SPECIFIC outcome of this task. Be clear and encouraging.
+  - steps: Minimum 4, Maximum 8 steps. Each step MUST start with an action verb and provide a clear "How-to" guide. 
+    (Bad: "Learn Java basics")
+    (Good: "Step 1: Open the IntelliJ app on your computer, create a 'New Project', and write a simple 'Hello World' message to make sure everything is working.")
+  - success_criteria: A list of 2-3 specific things to confirm you've done it correctly.
+  - common_mistakes: Helpful warnings about what usually trips people up.
+  - resources: ALWAYS provide:
+      1. A YouTube search link: {"label": "Video Guide: [Topic]", "url": "https://www.youtube.com/results?search_query=[Topic]+tutorial"}
+      2. A Documentation link: {"label": "Read: [Topic] Beginner's Guide", "url": "https://www.google.com/search?q=[Topic]+tutorial+guide"}
+
+  Respond ONLY with valid JSON matching this schema: 
+  { 
+    "days": [{ 
+      "day_number": 1, 
+      "tasks": [{ 
+        "title": "...", 
+        "description": "Short mission summary", 
+        "estimated_minutes": 30, 
+        "scheduled_time": "08:00 AM",
+        "objective": "...",
+        "steps": ["Step 1: ...", "Step 2: ..."],
+        "success_criteria": "...",
+        "common_mistakes": "...",
+        "requirements": ["Tool 1", "App 2"],
+        "resources": [{"label": "...", "url": "..."}] 
+      }] 
+    }] 
+  }`
 
   const user = `MISSION: ${title}
 CATEGORY: ${category}

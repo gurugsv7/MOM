@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type TabKey = 'home' | 'chat' | 'goals' | 'vault' | 'settings'
+export type TabKey = 'home' | 'chat' | 'goals' | 'vault' | 'settings' | 'task-detail'
 
 interface Toast {
   id: string
@@ -13,10 +13,12 @@ export type Theme = 'dark' | 'light' | 'system'
 interface UIState {
   activeTab: TabKey
   theme: Theme
+  selectedTaskId: string | null
   overloadWarnings: Array<{ goalId: string; dayNumbers: number[] }>
   toasts: Toast[]
   setActiveTab: (tab: TabKey) => void
   setTheme: (theme: Theme) => void
+  setSelectedTask: (taskId: string | null) => void
   addToast: (message: string, type?: Toast['type']) => void
   removeToast: (id: string) => void
   addOverloadWarning: (goalId: string, dayNumbers: number[]) => void
@@ -26,9 +28,11 @@ interface UIState {
 export const useUIStore = create<UIState>((set) => ({
   activeTab: 'home',
   theme: (localStorage.getItem('mom-theme') as Theme) || 'dark',
+  selectedTaskId: null,
   overloadWarnings: [],
   toasts: [],
 
+  setSelectedTask: (taskId) => set({ selectedTaskId: taskId, activeTab: taskId ? 'task-detail' : 'home' }),
   setActiveTab: (tab) => set({ activeTab: tab }),
   setTheme: (theme) => {
     localStorage.setItem('mom-theme', theme)

@@ -53,7 +53,7 @@ function ProgressRing({ progress, label, colorClass = 'text-primary' }: Progress
 export function DashboardPage() {
   const { user, profile } = useAuthStore()
   const { todayTasks, goals, updateTaskStatus, skipTask, rescheduleTask, setPendingGoal } = useGoalsStore()
-  const { setActiveTab } = useUIStore()
+  const { setActiveTab, setSelectedTask } = useUIStore()
 
   const displayName = useMemo(() => {
     return profile?.display_name?.toUpperCase() || 
@@ -204,7 +204,11 @@ export function DashboardPage() {
               const accentColor = index % 2 === 0 ? 'bg-primary' : 'bg-secondary'
 
               return (
-                <div key={task.id} className={cn("flex border border-outline-variant/20 relative group transition-all duration-300", bgClass)}>
+                <div 
+                  key={task.id} 
+                  onClick={() => setSelectedTask(task.id)}
+                  className={cn("flex border border-outline-variant/20 relative group transition-all duration-300 cursor-pointer hover:border-primary/40 active:scale-[0.99]", bgClass)}
+                >
                   <div className={cn("w-1", completed ? 'bg-outline-variant' : accentColor)} />
                   <div className="p-4 flex-grow space-y-2">
                     <div className="flex justify-between items-start">
@@ -258,7 +262,7 @@ export function DashboardPage() {
                   </div>
                   
                   {/* Actions */}
-                  <div className="flex flex-col justify-center gap-2 p-3 bg-surface-low border-l border-outline-variant/20 shrink-0">
+                  <div className="flex flex-col justify-center gap-2 p-3 bg-surface-low border-l border-outline-variant/20 shrink-0 z-10" onClick={(e) => e.stopPropagation()}>
                     <button 
                       onClick={() => updateTaskStatus(task.id, completed ? 'pending' : 'done')}
                       className={cn(

@@ -8,6 +8,7 @@ import { ChatPage } from '@/app/chat/ChatPage'
 import { GoalsPage } from '@/app/goals/GoalsPage'
 import { VaultPage } from '@/app/vault/VaultPage'
 import { SettingsPage } from '@/app/settings/SettingsPage'
+import { TaskDetailPage } from '@/app/tasks/TaskDetailPage'
 
 export function AppLayout() {
   const { activeTab, theme } = useUIStore()
@@ -45,9 +46,14 @@ export function AppLayout() {
         <div className={cn(activeTab !== 'settings' && 'hidden', 'h-full overflow-y-auto')}>
           <SettingsPage />
         </div>
+        {activeTab === 'task-detail' && (
+          <div className="absolute inset-0 z-[100] h-full overflow-hidden bg-background">
+            <TaskDetailPage />
+          </div>
+        )}
       </main>
 
-      <BottomNav />
+      {activeTab !== 'task-detail' && <BottomNav />}
     </div>
   )
 }
