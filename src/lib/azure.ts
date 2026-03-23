@@ -209,6 +209,8 @@ export async function processChatIntent(
     Operator Terminal Memory:
     ${context.memorySummary || "FIRST INITIALIZATION. NO PRIOR DATA."}
 
+    System Clock: ${new Date().toISOString().split('T')[0]} (Use this for date relative calculations)
+
     Recent Conversation History:
     ${recentDialogue || "NO RECENT HISTORY."}
 
@@ -253,6 +255,7 @@ export async function processChatIntent(
     - You only need a clear Title, a general idea of the objective, and a rough deadline/timeframe.
     - Once you have these, trigger ADD_GOAL immediately. Don't linger in discovery.
     - params for ADD_GOAL: { title, category, description, deadline, totalDays, dailyBudgetMins }.
+    - **CRITICAL**: 'deadline' MUST be in YYYY-MM-DD format. Use the System Clock to calculate this if the user says "in 3 months" or "next Friday".
     - If you don't have a specific dailyBudgetMins, default to 60.
 
     --- OTHER INTENTS ---
