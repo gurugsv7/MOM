@@ -321,7 +321,7 @@ export function ChatPage() {
   // Handle Pending Goal Initiation from Goals Page
   useEffect(() => {
     if (pendingGoal && user && cryptoKey) {
-      const initMessage = `[SYSTEM: MISSION INITIATION]\nTitle: ${pendingGoal.title}\nCategory: ${pendingGoal.category}\nInitial Context: ${pendingGoal.description || 'None'}\n\nMOM, start a HIGH-SPEED, ONE-QUESTION discovery (4-6 turns total). No filler. IMPORTANT: ALWAYS ask for CORE INTENT (e.g. WHICH language? WHICH diet?). Do NOT guess this. Only assume LOGISTICAL/TECH details (e.g. "I'll use Python" or "₹10k budget?"). EXACTLY ONE question per turn.`
+      const initMessage = `[SYSTEM: MISSION INITIATION]\nTitle: ${pendingGoal.title}\nCategory: ${pendingGoal.category}\nInitial Context: ${pendingGoal.description || 'None'}\n\nMOM, conduct an intuitive discovery. Don't be a form-filler. Acknowledge the goal, ask at most one highly relevant follow-up, or make smart assumptions and launch the mission immediately if you have enough info.`
       
       // Perform an initiation message
       handleCommand(initMessage, 'text')
